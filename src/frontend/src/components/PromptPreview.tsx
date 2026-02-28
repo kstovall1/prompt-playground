@@ -4,10 +4,10 @@ import { parseTemplateVariables } from '../utils/templateUtils';
 
 interface Props {
   template: string | null;
+  systemPrompt?: string | null;
   variables: string[];
   values: Record<string, string>;
   isEditing: boolean;
-  isLatestVersion: boolean;
   onToggleEdit: () => void;
   draftTemplate: string;
   onDraftChange: (template: string) => void;
@@ -33,10 +33,10 @@ function escapeRegex(str: string): string {
 
 export default function PromptPreview({
   template,
+  systemPrompt,
   variables,
   values,
   isEditing,
-  isLatestVersion,
   onToggleEdit,
   draftTemplate,
   onDraftChange,
@@ -96,7 +96,7 @@ export default function PromptPreview({
           <Eye className="w-4 h-4 text-gray-500" />
         )}
         <h3 className="text-sm font-semibold text-gray-700">
-          {isEditing ? 'Edit Template' : 'Prompt Preview'}
+          {isEditing ? 'New Version' : 'Prompt Preview'}
         </h3>
         {isDirty && (
           <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
@@ -109,26 +109,25 @@ export default function PromptPreview({
           </span>
         )}
         <div className={`${!isEditing && activeVars.length > 0 ? '' : 'ml-auto'} flex items-center gap-2`}>
-          {(isEditing || isLatestVersion) && (
-            <button
-              onClick={onToggleEdit}
-              className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 transition-colors"
-            >
-              {isEditing ? (
-                <>
-                  <Eye className="w-3 h-3" /> Preview
-                </>
-              ) : (
-                <>
-                  <Pencil className="w-3 h-3" /> New Version
-                </>
-              )}
-            </button>
-          )}
-          {isDirty && (
+          <button
+            onClick={onToggleEdit}
+            className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 transition-colors"
+          >
+            {isEditing ? (
+              <>
+                <Eye className="w-3 h-3" /> Preview
+              </>
+            ) : (
+              <>
+                <Pencil className="w-3 h-3" /> New Version
+              </>
+            )}
+          </button>
+          {isEditing && template !== null && (
             <button
               onClick={() => setShowSaveDialog(true)}
-              className="text-xs text-white bg-databricks-red hover:bg-red-700 px-2.5 py-1 rounded-md flex items-center gap-1 font-medium transition-colors"
+              disabled={!isDirty}
+              className="text-xs text-white bg-databricks-red hover:bg-red-700 px-2.5 py-1 rounded-md flex items-center gap-1 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Save className="w-3 h-3" /> Register Version
             </button>
@@ -136,7 +135,7 @@ export default function PromptPreview({
         </div>
       </div>
 
-      {/* Edit mode */}
+      {/* New Version mode */}
       {isEditing ? (
         <div className="flex-1 p-4 overflow-hidden flex flex-col">
           <textarea
@@ -148,19 +147,42 @@ export default function PromptPreview({
           />
         </div>
       ) : (
-        <div className="flex-1 p-4 overflow-auto">
-          <div
-            className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap font-mono bg-gray-50 rounded-lg p-4"
-            dangerouslySetInnerHTML={{
-              __html: renderPreview(
-                isDirty ? draftTemplate : (template || ''),
-                values
-              ).replace(
-                /\{\{\s*(\w+)\s*\}\}/g,
-                '<span class="inline-block bg-amber-100 text-amber-800 rounded px-1 font-mono text-xs">{{$1}}</span>'
-              ),
-            }}
-          />
+        <div className="flex-1 p-4 overflow-auto space-y-3">
+          {systemPrompt && (
+            <div>
+              <div className="text-[10px] font-semibold text-indigo-500 uppercase tracking-widest mb-1.5 px-1">
+                System
+              </div>
+              <div
+                className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap font-mono bg-indigo-50 rounded-lg p-4"
+                dangerouslySetInnerHTML={{
+                  __html: renderPreview(systemPrompt, values).replace(
+                    /\{\{\s*(\w+)\s*\}\}/g,
+                    '<span class="inline-block bg-amber-100 text-amber-800 rounded px-1 font-mono text-xs">{{$1}}</span>'
+                  ),
+                }}
+              />
+            </div>
+          )}
+          <div>
+            {systemPrompt && (
+              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5 px-1">
+                User
+              </div>
+            )}
+            <div
+              className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap font-mono bg-gray-50 rounded-lg p-4"
+              dangerouslySetInnerHTML={{
+                __html: renderPreview(
+                  template || '',
+                  values
+                ).replace(
+                  /\{\{\s*(\w+)\s*\}\}/g,
+                  '<span class="inline-block bg-amber-100 text-amber-800 rounded px-1 font-mono text-xs">{{$1}}</span>'
+                ),
+              }}
+            />
+          </div>
         </div>
       )}
 

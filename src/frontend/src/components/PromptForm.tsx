@@ -12,17 +12,27 @@ interface Props {
 export default function PromptForm({ catalog, schema, onSaved, onCancel }: Props) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [template, setTemplate] = useState('');
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [userTemplate, setUserTemplate] = useState('');
   const { create, loading, error } = useCreatePrompt();
 
   const fullName = `${catalog}.${schema}.${name.trim() || '<name>'}`;
-  const isValid = name.trim().length > 0 && template.trim().length > 0;
+  const isValid = name.trim().length > 0 && userTemplate.trim().length > 0;
+
+  const buildTemplate = () => {
+    const sys = systemPrompt.trim();
+    const user = userTemplate.trim();
+    if (sys) {
+      return `<system>\n${sys}\n</system>\n\n<user>\n${user}\n</user>`;
+    }
+    return user;
+  };
 
   const handleSave = async () => {
     try {
       const result = await create({
         name: `${catalog}.${schema}.${name.trim()}`,
-        template: template.trim(),
+        template: buildTemplate(),
         description: description.trim(),
       });
       onSaved(result.name, result.version);
@@ -91,16 +101,31 @@ export default function PromptForm({ catalog, schema, onSaved, onCancel }: Props
             />
           </div>
 
-          {/* Template */}
+          {/* System Prompt */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Template <span className="text-databricks-red">*</span>
+              System Prompt{' '}
+              <span className="font-normal text-gray-400">(optional)</span>
             </label>
             <textarea
-              placeholder={`Write your prompt here. Use {{variable_name}} for dynamic values.\n\nExample:\nYou are a helpful assistant. Answer the following question:\n\n{{question}}`}
-              value={template}
-              onChange={(e) => setTemplate(e.target.value)}
-              rows={12}
+              placeholder={`Define the model's persona or standing instructions.\n\nExample:\nYou are a concise, helpful assistant. Always respond in {{language}}.`}
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              rows={5}
+              className="w-full text-sm font-mono border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent resize-none bg-indigo-50/40"
+            />
+          </div>
+
+          {/* User Template */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              User Template <span className="text-databricks-red">*</span>
+            </label>
+            <textarea
+              placeholder={`The user-facing message with dynamic variables.\n\nExample:\nAnswer the following question clearly:\n\n{{question}}`}
+              value={userTemplate}
+              onChange={(e) => setUserTemplate(e.target.value)}
+              rows={7}
               className="w-full text-sm font-mono border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-databricks-red focus:border-transparent resize-none"
             />
             <p className="mt-1 text-xs text-gray-400">
@@ -108,7 +133,7 @@ export default function PromptForm({ catalog, schema, onSaved, onCancel }: Props
               <span className="font-mono bg-gray-100 px-1 rounded text-gray-600">
                 {'{{variable_name}}'}
               </span>{' '}
-              to define template variables that get filled in at run time.
+              in either field to define template variables filled in at run time.
             </p>
           </div>
 

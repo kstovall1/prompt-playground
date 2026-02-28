@@ -34,14 +34,17 @@ export function usePromptEditor({
   const [isNewPrompt, setIsNewPrompt] = useState(false);
   const [newPromptName, setNewPromptName] = useState('');
 
-  // Derived values
-  const isDirty = isEditing && draftTemplate !== (template?.template || '');
+  // Derived values — compare against raw_template so edits to a prompt with a system prompt
+  // don't show as dirty before the user has changed anything
+  const baseTemplate = template?.raw_template ?? template?.template ?? '';
+  const isDirty = isEditing && draftTemplate !== baseTemplate;
   const activeVariables = isEditing ? draftVariables : (template?.variables || []);
   const activeTemplate = isEditing ? draftTemplate : (template?.template || null);
 
   const toggleEdit = useCallback(() => {
     if (!isEditing && template) {
-      setDraftTemplate(template.template);
+      // Initialize from raw_template so the system prompt XML is preserved in the editor
+      setDraftTemplate(template.raw_template ?? template.template);
       setDraftVariables(template.variables);
     }
     setIsEditing((prev) => !prev);

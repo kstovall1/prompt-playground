@@ -16,6 +16,8 @@ export interface PromptTemplate {
   name: string;
   version: string;
   template: string;
+  system_prompt: string | null;
+  raw_template: string;
   variables: string[];
   tags: Record<string, string>;
   aliases: string[];
@@ -57,6 +59,7 @@ export interface EvalResponse {
 
 export interface RunResponse {
   rendered_prompt: string;
+  system_prompt: string | null;
   response: string;
   model: string;
   usage: {

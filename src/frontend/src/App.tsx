@@ -318,6 +318,7 @@ export default function App() {
             <div className={`${editor.isEditing ? 'h-3/5' : 'h-2/5'} min-h-[200px] border-b border-gray-200 overflow-hidden`}>
               <PromptPreview
                 template={editor.activeTemplate}
+                systemPrompt={editor.isEditing ? null : (template?.system_prompt ?? null)}
                 variables={editor.activeVariables}
                 values={variableValues}
                 isEditing={editor.isEditing}
@@ -350,6 +351,8 @@ export default function App() {
             await refreshPrompts();
             setSelectedPrompt(name);
             setSelectedVersion(version);
+            setVariableValues({});
+            editor.exitEdit();
           }}
           onCancel={() => setShowCreatePrompt(false)}
         />

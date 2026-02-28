@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 import re
 from pydantic import BaseModel, field_validator
 from server.mlflow_client import get_prompt_template
-from server.templates import render_template
+from server.templates import render_template, parse_system_user
 from server.mlflow_helpers import configure_mlflow, get_experiment_id, experiment_url, get_mlflow_client, EXPERIMENT_NAME
 from server.llm import call_model
 from server.warehouse import list_eval_tables, get_table_columns, read_table_rows
@@ -323,6 +323,8 @@ async def api_run_evaluation(request: EvalRequest):
 
     dataset_full_name = f"{request.dataset_catalog}.{request.dataset_schema}.{request.dataset_table}"
 
+    system_prompt_raw = prompt_data.get("system_prompt")
+
     # Run model against each row, collecting pre-computed outputs
     row_data: list[tuple[dict, str, str]] = []
     for i, row in enumerate(rows):
@@ -330,12 +332,14 @@ async def api_run_evaluation(request: EvalRequest):
             var: str(row.get(col, "")) for var, col in request.column_mapping.items()
         }
         rendered = render_template(prompt_data["template"], variables)
+        rendered_system = render_template(system_prompt_raw, variables) if system_prompt_raw else None
 
         try:
             model_result = await call_model(
                 endpoint_name=request.model_name,
                 prompt=rendered,
                 temperature=request.temperature,
+                system_prompt=rendered_system,
             )
             response_text = model_result["content"]
         except Exception as e:

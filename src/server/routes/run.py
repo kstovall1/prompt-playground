@@ -5,7 +5,7 @@ import mlflow
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from server.mlflow_client import get_prompt_template
-from server.templates import render_template, parse_template_variables
+from server.templates import render_template, parse_template_variables, parse_system_user
 from server.mlflow_helpers import configure_mlflow, get_experiment_id, experiment_url, get_mlflow_client
 from server.llm import call_model
 
@@ -27,6 +27,7 @@ class RunRequest(BaseModel):
 
 class RunResponse(BaseModel):
     rendered_prompt: str
+    system_prompt: str | None = None
     response: str
     model: str
     usage: dict = {}
@@ -37,8 +38,10 @@ class RunResponse(BaseModel):
 def _load_prompt_data(request: RunRequest) -> dict:
     """Load prompt template from registry or use draft."""
     if request.draft_template is not None:
+        system_prompt, user_template = parse_system_user(request.draft_template)
         return {
-            "template": request.draft_template,
+            "template": user_template,
+            "system_prompt": system_prompt,
             "variables": parse_template_variables(request.draft_template),
         }
     try:
@@ -49,8 +52,10 @@ def _load_prompt_data(request: RunRequest) -> dict:
         raise HTTPException(status_code=500, detail=f"Error loading prompt: {e}")
 
 
-def _log_run_artifacts(run_id: str, rendered: str, result: dict, request: RunRequest):
+def _log_run_artifacts(run_id: str, rendered: str, rendered_system: str | None, result: dict, request: RunRequest):
     """Log artifacts, metrics, and link prompt version to the MLflow run."""
+    if rendered_system:
+        mlflow.log_text(rendered_system, "system_prompt.txt")
     mlflow.log_text(rendered, "rendered_prompt.txt")
     mlflow.log_text(result["content"], "response.txt")
     usage = result.get("usage", {})
@@ -77,6 +82,8 @@ async def api_run_prompt(request: RunRequest):
     """Run a prompt with variable substitution against a selected model."""
     prompt_data = _load_prompt_data(request)
     rendered = render_template(prompt_data["template"], request.variables)
+    system_prompt_raw = prompt_data.get("system_prompt")
+    rendered_system = render_template(system_prompt_raw, request.variables) if system_prompt_raw else None
 
     # Call model inside an MLflow trace so it appears in the Traces tab
     run_id = None
@@ -109,13 +116,14 @@ async def api_run_prompt(request: RunRequest):
                         prompt=rendered,
                         max_tokens=request.max_tokens,
                         temperature=request.temperature,
+                        system_prompt=rendered_system,
                     )
                 except Exception as e:
                     span.set_status("ERROR")
                     raise HTTPException(status_code=502, detail=f"Model call failed: {e}")
                 span.set_outputs({"response": result["content"], "usage": result.get("usage", {})})
 
-            _log_run_artifacts(run.info.run_id, rendered, result, request)
+            _log_run_artifacts(run.info.run_id, rendered, rendered_system, result, request)
 
             run_id = run.info.run_id
 
@@ -133,12 +141,14 @@ async def api_run_prompt(request: RunRequest):
                     prompt=rendered,
                     max_tokens=request.max_tokens,
                     temperature=request.temperature,
+                    system_prompt=rendered_system,
                 )
             except Exception as model_err:
                 raise HTTPException(status_code=502, detail=f"Model call failed: {model_err}")
 
     return RunResponse(
         rendered_prompt=rendered,
+        system_prompt=rendered_system,
         response=result["content"],
         model=result["model"],
         usage=result["usage"],
@@ -164,8 +174,11 @@ async def api_preview_prompt(request: PreviewRequest):
         raise HTTPException(status_code=500, detail=f"Error loading prompt: {e}")
 
     rendered = render_template(prompt_data["template"], request.variables)
+    system_prompt_raw = prompt_data.get("system_prompt")
+    rendered_system = render_template(system_prompt_raw, request.variables) if system_prompt_raw else None
     return {
         "rendered_prompt": rendered,
+        "system_prompt": rendered_system,
         "template": prompt_data["template"],
         "variables": prompt_data["variables"],
     }
