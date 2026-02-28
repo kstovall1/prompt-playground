@@ -315,7 +315,7 @@ export default function App() {
           {/* Right Panel - Preview & Response */}
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Preview (top) */}
-            <div className="h-2/5 min-h-[200px] border-b border-gray-200 overflow-hidden">
+            <div className={`${editor.isEditing ? 'h-3/5' : 'h-2/5'} min-h-[200px] border-b border-gray-200 overflow-hidden`}>
               <PromptPreview
                 template={editor.activeTemplate}
                 variables={editor.activeVariables}

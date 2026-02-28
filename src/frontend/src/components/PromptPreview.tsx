@@ -134,9 +134,9 @@ export default function PromptPreview({
 
       {/* Edit mode */}
       {isEditing ? (
-        <div className="flex-1 p-4 overflow-auto">
+        <div className="flex-1 p-4 overflow-hidden flex flex-col">
           <textarea
-            className="w-full h-full text-sm font-mono bg-gray-50 rounded-lg p-4 resize-none border border-gray-200 focus:ring-2 focus:ring-databricks-red focus:border-databricks-red focus:outline-none"
+            className="flex-1 text-sm font-mono bg-gray-50 rounded-lg p-4 resize-none border border-gray-200 focus:ring-2 focus:ring-databricks-red focus:border-databricks-red focus:outline-none"
             value={draftTemplate}
             onChange={(e) => onDraftChange(e.target.value)}
             placeholder="Enter your prompt template here. Use {{variable_name}} for variables."
