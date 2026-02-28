@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { FlaskConical, Loader2, ChevronDown, ChevronUp, FileText, Plus, Pencil, Trash2, Eye } from 'lucide-react';
+import { FlaskConical, Loader2, ChevronDown, ChevronUp, Plus, Pencil, Trash2, Eye } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import type { PromptInfo, PromptVersion, PromptTemplate } from '../types';
 import { useEvalTables, useEvalColumns, useRunEval, useJudges, useDeleteJudge, useJudgeDetail } from '../hooks/useEvalApi';
-import { parseTemplateVariables } from '../utils/templateUtils';
+import { parseTemplateVariables, parseSystemUser } from '../utils/templateUtils';
 import JudgeForm from './eval/JudgeForm';
 import EvalResults from './eval/EvalResults';
 import ConfirmDialog from './ConfirmDialog';
@@ -41,10 +41,14 @@ interface Props {
 function TemplatePreview({ template }: { template: PromptTemplate }) {
   const [expanded, setExpanded] = useState(false);
 
-  const highlighted = template.template.replace(
-    /\{\{(\s*\w+\s*)\}\}/g,
-    '<mark class="bg-purple-100 text-purple-700 rounded px-0.5 not-italic">{{$1}}</mark>'
-  );
+  const highlight = (text: string) =>
+    text.replace(
+      /\{\{(\s*\w+\s*)\}\}/g,
+      '<mark class="bg-purple-100 text-purple-700 rounded px-0.5 not-italic">{{$1}}</mark>'
+    );
+
+  const src = template.raw_template ?? template.template;
+  const { system, user } = parseSystemUser(src);
 
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -52,18 +56,39 @@ function TemplatePreview({ template }: { template: PromptTemplate }) {
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
       >
-        <FileText className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-        <span className="text-xs font-semibold text-gray-600 flex-1">Prompt Template</span>
+        <Eye className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+        <span className="text-xs font-semibold text-gray-600 flex-1">Prompt Preview</span>
         {expanded
           ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
           : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
         }
       </button>
       {expanded && (
-        <div
-          className="px-3 py-2.5 text-xs font-mono text-gray-700 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto bg-white"
-          dangerouslySetInnerHTML={{ __html: highlighted }}
-        />
+        <div className="px-3 py-2.5 space-y-2 max-h-64 overflow-y-auto bg-white">
+          {system !== null ? (
+            <>
+              <div className="rounded-md bg-indigo-50 border border-indigo-100 p-2">
+                <div className="text-[10px] font-semibold text-indigo-500 uppercase tracking-widest mb-1">System</div>
+                <div
+                  className="text-xs font-mono text-gray-700 whitespace-pre-wrap leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: highlight(system) }}
+                />
+              </div>
+              <div className="rounded-md bg-gray-50 border border-gray-200 p-2">
+                <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">User</div>
+                <div
+                  className="text-xs font-mono text-gray-700 whitespace-pre-wrap leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: highlight(user) }}
+                />
+              </div>
+            </>
+          ) : (
+            <div
+              className="text-xs font-mono text-gray-700 whitespace-pre-wrap leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: highlight(user) }}
+            />
+          )}
+        </div>
       )}
     </div>
   );

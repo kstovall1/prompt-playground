@@ -39,7 +39,7 @@ export function usePromptEditor({
   const baseTemplate = template?.raw_template ?? template?.template ?? '';
   const isDirty = isEditing && draftTemplate !== baseTemplate;
   const activeVariables = isEditing ? draftVariables : (template?.variables || []);
-  const activeTemplate = isEditing ? draftTemplate : (template?.template || null);
+  const activeTemplate = isEditing ? draftTemplate : (template?.raw_template ?? template?.template ?? null);
 
   const toggleEdit = useCallback(() => {
     if (!isEditing && template) {

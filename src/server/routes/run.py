@@ -109,7 +109,11 @@ async def api_run_prompt(request: RunRequest):
 
             # Trace the LLM call as a span so it shows in the Traces tab
             with mlflow.start_span(name="llm_call", span_type="LLM") as span:
-                span.set_inputs({"prompt": rendered, "model": request.model_name})
+                span_inputs = {"model": request.model_name}
+                if rendered_system:
+                    span_inputs["system_prompt"] = rendered_system
+                span_inputs["user_prompt"] = rendered
+                span.set_inputs(span_inputs)
                 try:
                     result = await call_model(
                         endpoint_name=request.model_name,
