@@ -138,6 +138,13 @@ export default function EvaluatePanel({
   const { columns } = useEvalColumns(localEvalCatalog, localEvalSchema, selectedTable);
   const { result, loading, error, runEval, reset } = useRunEval();
 
+  // Auto-select latest version when versions load and none is selected
+  useEffect(() => {
+    if (versions.length > 0 && !selectedVersion) {
+      onSelectVersion(versions[0].version);
+    }
+  }, [versions, selectedVersion, onSelectVersion]);
+
   // Use variables from the full template (reliable) or fall back to version preview parsing
   const variables: string[] = template?.variables ?? (() => {
     const selectedVersionData = versions.find((v) => v.version === selectedVersion);

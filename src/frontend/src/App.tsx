@@ -321,6 +321,7 @@ export default function App() {
                 variables={editor.activeVariables}
                 values={variableValues}
                 isEditing={editor.isEditing}
+                isLatestVersion={!versions.length || !selectedVersion || selectedVersion === versions[0]?.version}
                 onToggleEdit={editor.toggleEdit}
                 draftTemplate={editor.draftTemplate}
                 onDraftChange={editor.setDraftTemplate}

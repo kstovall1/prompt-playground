@@ -7,6 +7,7 @@ interface Props {
   variables: string[];
   values: Record<string, string>;
   isEditing: boolean;
+  isLatestVersion: boolean;
   onToggleEdit: () => void;
   draftTemplate: string;
   onDraftChange: (template: string) => void;
@@ -35,6 +36,7 @@ export default function PromptPreview({
   variables,
   values,
   isEditing,
+  isLatestVersion,
   onToggleEdit,
   draftTemplate,
   onDraftChange,
@@ -107,20 +109,22 @@ export default function PromptPreview({
           </span>
         )}
         <div className={`${!isEditing && activeVars.length > 0 ? '' : 'ml-auto'} flex items-center gap-2`}>
-          <button
-            onClick={onToggleEdit}
-            className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 transition-colors"
-          >
-            {isEditing ? (
-              <>
-                <Eye className="w-3 h-3" /> Preview
-              </>
-            ) : (
-              <>
-                <Pencil className="w-3 h-3" /> Edit
-              </>
-            )}
-          </button>
+          {(isEditing || isLatestVersion) && (
+            <button
+              onClick={onToggleEdit}
+              className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 transition-colors"
+            >
+              {isEditing ? (
+                <>
+                  <Eye className="w-3 h-3" /> Preview
+                </>
+              ) : (
+                <>
+                  <Pencil className="w-3 h-3" /> New Version
+                </>
+              )}
+            </button>
+          )}
           {isDirty && (
             <button
               onClick={() => setShowSaveDialog(true)}

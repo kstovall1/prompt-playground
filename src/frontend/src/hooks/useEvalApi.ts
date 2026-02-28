@@ -34,10 +34,8 @@ export function useExperimentPrompts(experimentName: string) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!experimentName) {
-      setPromptNames(null);
-      return;
-    }
+    setPromptNames(null);
+    if (!experimentName) return;
     setLoading(true);
     const params = new URLSearchParams({ experiment_name: experimentName });
     apiFetch<{ prompt_names: string[] }>(`/eval/experiments/prompts?${params.toString()}`)

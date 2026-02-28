@@ -37,10 +37,8 @@ export function usePromptVersions(name: string | null) {
   const [error, setError] = useState<string | null>(null);
 
   const fetchVersions = useCallback(async () => {
-    if (!name) {
-      setVersions([]);
-      return;
-    }
+    setVersions([]);
+    if (!name) return;
     setLoading(true);
     setError(null);
     try {
