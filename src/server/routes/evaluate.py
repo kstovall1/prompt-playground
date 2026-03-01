@@ -4,8 +4,7 @@ import logging
 import asyncio
 import mlflow
 from fastapi import APIRouter, HTTPException
-import re
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 from server.mlflow_client import get_prompt_template
 from server.templates import render_template
 from server.mlflow_helpers import configure_mlflow, get_experiment_id, experiment_url, get_mlflow_client, EXPERIMENT_NAME
@@ -149,9 +148,6 @@ async def api_get_judge_detail(name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-_JUDGE_NAME_RE = re.compile(r'^[a-z][a-z0-9_]*$')
-
-
 class CreateJudgeRequest(BaseModel):
     name: str
     type: str = "custom"  # "custom" | "guidelines"
@@ -159,16 +155,6 @@ class CreateJudgeRequest(BaseModel):
     guidelines: list[str] | None = None   # for type="guidelines"
     experiment_name: str | None = None
     is_update: bool = False
-
-    @field_validator('name')
-    @classmethod
-    def name_must_be_valid(cls, v: str) -> str:
-        if not _JUDGE_NAME_RE.match(v):
-            raise ValueError(
-                'Judge name must start with a lowercase letter and contain only '
-                'lowercase letters, digits, and underscores.'
-            )
-        return v
 
 
 @router.post("/judges")

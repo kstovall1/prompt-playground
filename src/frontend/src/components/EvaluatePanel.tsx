@@ -134,7 +134,7 @@ export default function EvaluatePanel({
   const { deleteJudge, loading: deleteLoading } = useDeleteJudge();
 
   const { judges, loading: judgesLoading, refresh: refreshJudges } = useJudges(experimentName);
-  const { tables, loading: tablesLoading } = useEvalTables(localEvalCatalog, localEvalSchema);
+  const { tables, loading: tablesLoading, error: tablesError } = useEvalTables(localEvalCatalog, localEvalSchema);
   const { columns } = useEvalColumns(localEvalCatalog, localEvalSchema, selectedTable);
   const { result, loading, error, runEval, reset } = useRunEval();
 
@@ -217,6 +217,8 @@ export default function EvaluatePanel({
           </div>
           {tablesLoading ? (
             <p className="text-xs text-gray-400">Loading tables...</p>
+          ) : tablesError ? (
+            <p className="text-xs text-red-500" title={tablesError}>Failed to load tables — check catalog/schema and warehouse config.</p>
           ) : (
             <SearchableSelect
               value={selectedTable || ''}

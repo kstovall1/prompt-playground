@@ -1,8 +1,13 @@
-import { useState, useEffect } from 'react';
-import { CheckCircle, Loader2, Plus, Save, Trash2, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { CheckCircle, ChevronDown, Loader2, Plus, Save, Trash2, X } from 'lucide-react';
 import { useCreateJudge, useJudgeDetail } from '../../hooks/useEvalApi';
 
 type JudgeType = 'custom' | 'guidelines';
+
+const VARIABLES = [
+  { label: '{{ inputs }}', value: '{{ inputs }}', description: 'The prompt sent to the model' },
+  { label: '{{ outputs }}', value: '{{ outputs }}', description: "The model's response" },
+];
 
 interface Props {
   experimentName: string;
@@ -18,6 +23,9 @@ export default function JudgeForm({ experimentName, editingJudge, onSaved, onCan
   const [instructions, setInstructions] = useState('');
   const [guidelines, setGuidelines] = useState<string[]>(['']);
   const [savedOk, setSavedOk] = useState(false);
+  const [showVarMenu, setShowVarMenu] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const varMenuRef = useRef<HTMLDivElement>(null);
   const { create, loading, error } = useCreateJudge();
   const { detail, loading: detailLoading } = useJudgeDetail(editingJudge ?? null);
 
@@ -30,6 +38,33 @@ export default function JudgeForm({ experimentName, editingJudge, onSaved, onCan
       setGuidelines(detail.guidelines);
     }
   }, [detail]);
+
+  // Close variable menu on outside click
+  useEffect(() => {
+    if (!showVarMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (varMenuRef.current && !varMenuRef.current.contains(e.target as Node)) {
+        setShowVarMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showVarMenu]);
+
+  const insertVariable = (variable: string) => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const start = el.selectionStart ?? instructions.length;
+    const end = el.selectionEnd ?? instructions.length;
+    const next = instructions.slice(0, start) + variable + instructions.slice(end);
+    setInstructions(next);
+    setShowVarMenu(false);
+    // Restore focus and move cursor after inserted text
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + variable.length, start + variable.length);
+    });
+  };
 
   const handleSave = async () => {
     setSavedOk(false);
@@ -57,14 +92,10 @@ export default function JudgeForm({ experimentName, editingJudge, onSaved, onCan
   const removeGuideline = (idx: number) => { setSavedOk(false); setGuidelines((prev) => prev.filter((_, i) => i !== idx)); };
   const updateGuideline = (idx: number, val: string) => { setSavedOk(false); setGuidelines((prev) => prev.map((g, i) => (i === idx ? val : g))); };
 
-  const NAME_RE = /^[a-z][a-z0-9_]*$/;
-  const nameError = name.trim().length > 0 && !NAME_RE.test(name.trim())
-    ? 'Use lowercase letters, digits, and underscores only. Must start with a letter.'
-    : null;
+  const nameError = null;
 
   const isValid =
     name.trim().length > 0 &&
-    !nameError &&
     (judgeType === 'custom'
       ? instructions.trim().length > 0
       : guidelines.some((g) => g.trim().length > 0));
@@ -114,7 +145,7 @@ export default function JudgeForm({ experimentName, editingJudge, onSaved, onCan
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. tone_check, relevance_scorer"
+                  placeholder="e.g. Tone Check, GuidelinesKT"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   readOnly={isEdit}
@@ -129,7 +160,7 @@ export default function JudgeForm({ experimentName, editingJudge, onSaved, onCan
                 {!isEdit && (
                   nameError
                     ? <p className="mt-1 text-xs text-red-500">{nameError}</p>
-                    : <p className="mt-1 text-xs text-gray-400">Use lowercase letters, digits, and underscores. Must start with a letter.</p>
+                    : <p className="mt-1 text-xs text-gray-400">Any name works — spaces and uppercase are allowed.</p>
                 )}
               </div>
 
@@ -175,18 +206,46 @@ export default function JudgeForm({ experimentName, editingJudge, onSaved, onCan
               {/* Custom: instructions textarea */}
               {judgeType === 'custom' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Instructions
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Instructions
+                    </label>
+                    {/* Add variable dropdown */}
+                    <div className="relative" ref={varMenuRef}>
+                      <button
+                        type="button"
+                        onClick={() => setShowVarMenu((v) => !v)}
+                        className="flex items-center gap-1 text-xs font-medium text-gray-600 border border-gray-300 rounded-md px-2 py-1 hover:bg-gray-50 transition-colors"
+                      >
+                        Add variable <ChevronDown className="w-3 h-3" />
+                      </button>
+                      {showVarMenu && (
+                        <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10 overflow-hidden">
+                          {VARIABLES.map((v) => (
+                            <button
+                              key={v.value}
+                              type="button"
+                              onClick={() => insertVariable(v.value)}
+                              className="w-full text-left px-3 py-2.5 hover:bg-gray-50 transition-colors"
+                            >
+                              <span className="block text-xs font-mono font-semibold text-purple-700">{v.label}</span>
+                              <span className="block text-xs text-gray-500 mt-0.5">{v.description}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   <textarea
-                    placeholder={`Tell the judge what to look for and how to score it. For example:\n\n"Evaluate whether the response is written in a friendly, conversational tone. Score 1 if it sounds robotic or overly formal, and 5 if it feels warm and approachable."`}
+                    ref={textareaRef}
+                    placeholder={`Evaluate if the response in {{ outputs }} correctly answers the question in {{ inputs }}. The response should be accurate, complete, and professional.`}
                     value={instructions}
                     onChange={(e) => { setSavedOk(false); setInstructions(e.target.value); }}
                     rows={8}
                     className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-databricks-red focus:border-transparent resize-none"
                   />
                   <p className="mt-1 text-xs text-gray-400">
-                    Be specific — describe what a good (5) and bad (1) response looks like.
+                    Use <code className="bg-gray-100 px-1 rounded">{'{{ inputs }}'}</code> for the prompt and <code className="bg-gray-100 px-1 rounded">{'{{ outputs }}'}</code> for the model response.
                   </p>
                 </div>
               )}

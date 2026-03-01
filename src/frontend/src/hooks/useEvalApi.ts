@@ -129,18 +129,20 @@ export function useDeleteJudge() {
 export function useEvalTables(catalog: string, schema: string) {
   const [tables, setTables] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!catalog || !schema) return;
     setLoading(true);
+    setError(null);
     const params = new URLSearchParams({ catalog, schema });
     apiFetch<{ tables: { name: string }[] }>(`/eval/tables?${params.toString()}`)
       .then((d) => setTables(d.tables.map((t) => t.name)))
-      .catch(() => setTables([]))
+      .catch((e) => { setTables([]); setError(String(e)); })
       .finally(() => setLoading(false));
   }, [catalog, schema]);
 
-  return { tables, loading };
+  return { tables, loading, error };
 }
 
 export function useEvalColumns(catalog: string, schema: string, table: string | null) {
