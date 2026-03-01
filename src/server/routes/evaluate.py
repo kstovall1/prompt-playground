@@ -132,12 +132,19 @@ async def api_get_judge_detail(name: str):
         from mlflow.genai.scorers import get_scorer
         scorer = get_scorer(name=name)
         data = scorer.model_dump() if hasattr(scorer, 'model_dump') else {}
-        judge_type = "custom"
-        instructions = getattr(scorer, 'instructions', None) or data.get('instructions')
-        guidelines = None
-        if hasattr(scorer, 'guidelines'):
+        # Check both model_dump and attribute — Databricks-created scorers may only serialize
+        # into model_dump; also check truthiness so None/[] doesn't trigger guidelines branch.
+        raw_guidelines = data.get('guidelines') or getattr(scorer, 'guidelines', None)
+        raw_instructions = data.get('instructions') or getattr(scorer, 'instructions', None)
+
+        if raw_guidelines:
             judge_type = "guidelines"
-            guidelines = scorer.guidelines
+            guidelines = raw_guidelines
+            instructions = None
+        else:
+            judge_type = "custom"
+            instructions = raw_instructions
+            guidelines = None
         return {
             "name": name,
             "type": judge_type,
