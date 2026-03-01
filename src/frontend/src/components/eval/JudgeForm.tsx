@@ -7,6 +7,8 @@ type JudgeType = 'custom' | 'guidelines';
 const VARIABLES = [
   { label: '{{ inputs }}', value: '{{ inputs }}', description: 'The prompt sent to the model' },
   { label: '{{ outputs }}', value: '{{ outputs }}', description: "The model's response" },
+  { label: '{{ trace }}', value: '{{ trace }}', description: 'The full MLflow trace for the request' },
+  { label: '{{ expectations }}', value: '{{ expectations }}', description: 'Expected output for comparison' },
 ];
 
 interface Props {
