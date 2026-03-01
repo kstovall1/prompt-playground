@@ -49,10 +49,10 @@ def mlflow_genai_evaluate(
     # Build eval dataset in correct MLflow 3 GenAI format
     eval_data = [
         {
-            "inputs": {"request": rendered, "row_index": i},
+            "inputs": {"request": rendered},
             "outputs": {"response": response_text},
         }
-        for i, (_, rendered, response_text) in enumerate(row_data)
+        for _, rendered, response_text in row_data
     ]
 
     # Use a registered MLflow judge if specified, otherwise fall back to built-in quality scorer
@@ -67,6 +67,7 @@ def mlflow_genai_evaluate(
 
     _log_run_metadata(run_id, run_name, prompt_name, prompt_version, model_name, scorer_name, dataset, len(row_data))
     _link_prompt_version(run_id, prompt_name, prompt_version)
+    _log_dataset_input(run_id, dataset)
 
     expected_name = scorer_name or "response_quality"
 
@@ -101,6 +102,18 @@ def _resolve_scorers(scorer_name: str | None, model_name: str, judge_model: str 
             logger.warning("Could not load scorer '%s': %s — falling back to QualityScorer", scorer_name, e)
     effective_judge_model = judge_model or model_name
     return [QualityScorer(judge_model=effective_judge_model, judge_temperature=judge_temperature)]
+
+
+def _log_dataset_input(run_id: str, dataset: str) -> None:
+    """Register the UC table as an MLflow dataset input so it appears in the Experiments Datasets tab."""
+    try:
+        from mlflow.data.delta_dataset_source import DeltaDatasetSource
+        from mlflow.data.meta_dataset import MetaDataset
+        ds = MetaDataset(source=DeltaDatasetSource(delta_table_name=dataset), name=dataset)
+        with mlflow.start_run(run_id=run_id):
+            mlflow.log_input(ds, context="eval")
+    except Exception as e:
+        logger.warning("MLflow dataset input logging failed (non-fatal): %s", e)
 
 
 def _log_run_metadata(
@@ -191,12 +204,7 @@ def _extract_scores_from_result(eval_result: object, expected_name: str) -> dict
         if guideline_cols:
             # Guidelines judge: collect per-guideline results into score_details
             for idx, row in df.iterrows():
-                inputs = row.get("inputs") if hasattr(row, 'get') else None
-                row_idx = None
-                if isinstance(inputs, dict):
-                    row_idx = inputs.get("row_index")
-                if row_idx is None:
-                    row_idx = idx
+                row_idx = idx
 
                 details = []
                 for score_col, rat_col in guideline_cols:
@@ -240,12 +248,7 @@ def _extract_scores_from_result(eval_result: object, expected_name: str) -> dict
             return row_scores
 
         for idx, row in df.iterrows():
-            inputs = row.get("inputs") if hasattr(row, 'get') else None
-            row_idx = None
-            if isinstance(inputs, dict):
-                row_idx = inputs.get("row_index")
-            if row_idx is None:
-                row_idx = idx
+            row_idx = idx
 
             raw_value = row.get(score_col) if hasattr(row, 'get') else None
             raw_rationale = row.get(rationale_col) if rationale_col and hasattr(row, 'get') else None
@@ -279,8 +282,6 @@ def _safe_str(val: object) -> str | None:
 
 def _extract_row_scores(run_id: str, expected_name: str) -> dict[int, RowScore]:
     """Fallback: extract per-row scores from evaluation traces."""
-    import json as _json
-
     # First pass: collect all matching assessments per row
     raw: dict[int, list[dict]] = {}
     traces: list = []
@@ -291,36 +292,18 @@ def _extract_row_scores(run_id: str, expected_name: str) -> dict[int, RowScore]:
         traces = mlflow.search_traces(run_id=run_id, return_type="list")
 
         for trace_idx, trace in enumerate(traces):
-            row_idx = None
+            row_idx = trace_idx
             assessments: list = []
 
             if hasattr(trace, 'info'):
                 info = trace.info
-                request_preview = getattr(info, 'request_preview', None)
-                # inputs are {"request": "<prompt text>", "row_index": N}
-                # row_index is always at the top level — never nested inside "request"
-                if isinstance(request_preview, str):
-                    try:
-                        parsed = _json.loads(request_preview)
-                        if isinstance(parsed, dict):
-                            row_idx = parsed.get("row_index")
-                    except (ValueError, TypeError):
-                        pass
-                elif isinstance(request_preview, dict):
-                    row_idx = request_preview.get("row_index")
-
                 assessments = getattr(info, 'assessments', None) or []
                 if not assessments:
                     data = getattr(trace, 'data', None)
                     if data:
                         assessments = getattr(data, 'assessments', []) or []
             elif isinstance(trace, dict):
-                inputs_data = trace.get("inputs") or {}
-                row_idx = inputs_data.get("row_index") if isinstance(inputs_data, dict) else None
                 assessments = trace.get("assessments") or []
-
-            if row_idx is None:
-                row_idx = trace_idx  # fallback to trace order
 
             for assessment in assessments:
                 if hasattr(assessment, 'name'):

@@ -97,7 +97,7 @@ async def api_get_experiment_prompts(experiment_name: str):
 async def api_list_eval_tables(catalog: str = "main", schema: str = "eval_data"):
     """List tables available as eval datasets."""
     try:
-        tables = list_eval_tables(catalog, schema)
+        tables = await asyncio.to_thread(list_eval_tables, catalog, schema)
         return {"tables": tables}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -236,7 +236,7 @@ async def api_delete_judge(name: str, experiment_name: str | None = None):  # no
 async def api_get_columns(catalog: str, schema: str, table: str):
     """Get column names for a table so the user can map them to prompt variables."""
     try:
-        cols = get_table_columns(catalog, schema, table)
+        cols = await asyncio.to_thread(get_table_columns, catalog, schema, table)
         return {"columns": cols}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -302,7 +302,8 @@ async def api_run_evaluation(request: EvalRequest):
 
     # Read dataset rows
     try:
-        rows = read_table_rows(
+        rows = await asyncio.to_thread(
+            read_table_rows,
             request.dataset_catalog,
             request.dataset_schema,
             request.dataset_table,
@@ -316,25 +317,31 @@ async def api_run_evaluation(request: EvalRequest):
 
     dataset_full_name = f"{request.dataset_catalog}.{request.dataset_schema}.{request.dataset_table}"
 
-    # Run model against each row, collecting pre-computed outputs
-    row_data: list[tuple[dict, str, str]] = []
-    for i, row in enumerate(rows):
+    # Run model against each row concurrently (max 10 in-flight at once)
+    sem = asyncio.Semaphore(10)
+
+    async def run_row(i: int, row: dict) -> tuple:
         variables = {
             var: str(row.get(col, "")) for var, col in request.column_mapping.items()
         }
         rendered = render_template(prompt_data["template"], variables)
+        async with sem:
+            try:
+                model_result = await call_model(
+                    endpoint_name=request.model_name,
+                    prompt=rendered,
+                    temperature=request.temperature,
+                )
+                response_text = model_result["content"]
+            except Exception as e:
+                response_text = f"[ERROR: {e}]"
+        return (i, variables, rendered, response_text)
 
-        try:
-            model_result = await call_model(
-                endpoint_name=request.model_name,
-                prompt=rendered,
-                temperature=request.temperature,
-            )
-            response_text = model_result["content"]
-        except Exception as e:
-            response_text = f"[ERROR: {e}]"
-
-        row_data.append((variables, rendered, response_text))
+    results_raw = await asyncio.gather(*[run_row(i, row) for i, row in enumerate(rows)])
+    row_data: list[tuple[dict, str, str]] = [
+        (variables, rendered, response_text)
+        for _, variables, rendered, response_text in sorted(results_raw)
+    ]
 
     # Run mlflow.genai.evaluate() in a thread (all MLflow calls are synchronous)
     run_id = None

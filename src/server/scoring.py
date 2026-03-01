@@ -81,6 +81,6 @@ class QualityScorer(Scorer):
         score, rationale = score_response_sync(request, response, self.judge_model, self.judge_temperature)
         return Feedback(
             name="response_quality",
-            value=float(score) if score is not None else 0.0,
-            rationale=rationale or "Scoring unavailable",
+            value=score,
+            rationale=rationale,
         )
