@@ -8,7 +8,7 @@ Databricks App for testing MLflow 3 Prompt Registry prompts. Browse prompts by c
 ## Stack
 - **Backend**: FastAPI (uvicorn :8000), Python 3.11, `uv` for deps
 - **Frontend**: React + TypeScript + Vite + Tailwind SPA; `dist/` pre-built and committed
-- **MLflow**: `mlflow[databricks]>=3.1.0` — all MLflow calls are sync → wrapped in `asyncio.to_thread()` in async routes
+- **MLflow**: `mlflow[databricks]>=3.1.0` — all MLflow SDK calls are sync → wrapped in `asyncio.to_thread()` in async routes
 - **Auth**: `IS_DATABRICKS_APP` env var → M2M OAuth via `WorkspaceClient()` (deployed) or `WorkspaceClient(profile=...)` (local)
 
 ---
@@ -22,16 +22,16 @@ src/
     config.py                   Reads env vars, exposes settings
     mlflow_client.py            Prompt CRUD (create/get/list), template parsing
     mlflow_helpers.py           configure_mlflow(), get_mlflow_client(), experiment utils
-    templates.py                Template rendering, parse_system_user(), buildXmlTemplate
-    llm.py                      call_model() → Databricks model serving endpoint
-    evaluation.py               mlflow_genai_evaluate(), score extraction from traces
+    templates.py                parse_template_variables(), render_template()
+    llm.py                      list_serving_endpoints(), call_model() → Databricks model serving
+    evaluation.py               mlflow_genai_evaluate(), score extraction from result_df + traces
     warehouse.py                SQL Warehouse queries (list tables, columns, read rows)
-    scoring.py                  _resolve_scorers(), QualityScorer wrapper
+    scoring.py                  QualityScorer (default LLM judge), score_response_sync()
     routes/
       config.py                 GET /api/config
       models.py                 GET /api/models
       prompts.py                GET/POST /api/prompts, /api/prompts/versions
-      run.py                    POST /api/run
+      run.py                    POST /api/run, POST /api/preview
       evaluate.py               GET/POST/DELETE /api/eval/*
 
 src/frontend/src/
@@ -46,7 +46,7 @@ src/frontend/src/
     usePromptEditor.ts          Edit/draft/save state for PromptPreview
   components/
     PromptSelector.tsx          Prompt + version picker with version card list
-    PromptPreview.tsx           Chat/Raw toggle; edit mode with system+user textareas
+    PromptPreview.tsx           Preview and edit mode for prompt template
     PromptForm.tsx              Create new prompt slide-over
     VariableInputs.tsx          {{var}} input fields
     ModelSelector.tsx
@@ -61,7 +61,7 @@ src/frontend/src/
     TabBar.tsx
     Header.tsx
   utils/
-    templateUtils.ts            parseSystemUser(), buildXmlTemplate(), parseTemplateVariables()
+    templateUtils.ts            parseTemplateVariables()
 ```
 
 ---
@@ -77,6 +77,7 @@ src/frontend/src/
 | GET | `/api/prompts/versions` | Lists versions for a prompt |
 | POST | `/api/prompts/versions` | Registers a new version |
 | POST | `/api/run` | Runs prompt against model, logs MLflow trace |
+| POST | `/api/preview` | Renders prompt with variables, no model call |
 | GET | `/api/eval/experiments` | Lists MLflow experiments (filtered by catalog.schema if provided) |
 | GET | `/api/eval/experiments/prompts` | Distinct prompt names that have runs in an experiment |
 | GET | `/api/eval/tables` | Lists UC tables for eval dataset |
@@ -98,7 +99,7 @@ Fully qualified: `catalog.schema.name`. All prompt endpoints use query params, n
 `app.yaml` env vars → `GET /api/config` → `useConfig()` in React → App.tsx initializes catalog/schema/experiment state. `catalog` initializes to `''` (race condition guard — `usePrompts` waits for config to load before fetching).
 
 ### Async MLflow Pattern
-All MLflow SDK calls are synchronous. Wrapped with `asyncio.to_thread()` wherever used in async FastAPI route handlers.
+All MLflow SDK calls are synchronous. Wrapped with `asyncio.to_thread()` wherever used in async FastAPI route handlers. Known exception: `read_table_rows()` in `routes/evaluate.py` is not yet wrapped (tracked in fix/eval-reliability).
 
 ### Auth Pattern
 ```python
@@ -111,10 +112,24 @@ else:
 
 ---
 
-## System/User Prompt Splitting
+## Prompt Template Storage
 
-### Storage Convention
-XML string stored in Prompt Registry:
+Templates are stored as plain strings in the MLflow Prompt Registry. The `{{variable}}` syntax marks substitution points. Variables are extracted by `parse_template_variables()` in `templates.py`.
+
+`get_prompt_template()` in `mlflow_client.py` returns:
+```python
+{
+    "name": str,           # fully qualified: catalog.schema.name
+    "version": str,
+    "template": str,       # raw template string as stored in the registry
+    "variables": list[str],  # extracted {{var}} names in order of appearance
+    "tags": dict,
+    "aliases": list[str],
+}
+```
+
+### Planned: System/User Prompt Splitting (branch: `feature/system-user-prompt-splitting`)
+A storage convention using XML tags is being added in a separate branch:
 ```
 <system>
 You are a helpful assistant for {{company}}.
@@ -124,25 +139,16 @@ You are a helpful assistant for {{company}}.
 Help me with: {{topic}}
 </user>
 ```
-Backward compatible — plain strings treated as user-only.
-
-### Backend
-- `templates.py`: `parse_system_user(str | list[dict]) -> (str|None, str)` handles (1) list[dict] OSS chat format, (2) XML-tagged string, (3) plain string. `_normalize_escapes()` converts literal `\n`/`\t` → actual chars.
-- `mlflow_client.py`: `get_prompt_template()` returns `{ system_prompt, raw_template, template (user only), variables }`. `raw_template` = full XML for round-trip edit fidelity.
-- `llm.py`: `call_model(prompt, system_prompt=None)` builds `[{role:system}, {role:user}]` when system present.
-- `routes/run.py`: logs `system_prompt.txt` as artifact; MLflow span inputs include `system_prompt` + `user_prompt` separately.
-
-### Frontend
-- `templateUtils.ts`: `parseSystemUser()` mirrors backend; `buildXmlTemplate(system, user)` returns plain string when no system.
-- `usePromptEditor.ts`: `baseTemplate = raw_template ?? template`; `activeTemplate` uses `raw_template` so `parseSystemUser` can extract both parts in preview.
+When merged, `templates.py` will gain `parse_system_user()` and `buildXmlTemplate()`, and `call_model()` will accept a `system_prompt` parameter to build a proper `[{role:system},{role:user}]` message list.
 
 ---
 
 ## Eval Flow
 
-1. Model called for all rows (concurrent per row)
-2. All pre-computed outputs passed to `mlflow.genai.evaluate()` in a thread
-3. Scores extracted from `eval_result.result_df` (primary) or MLflow traces (fallback)
+1. Dataset rows read from UC table via SQL Warehouse
+2. Model called for each row **sequentially** (concurrent execution via `asyncio.gather` is a pending improvement)
+3. All pre-computed outputs passed to `mlflow.genai.evaluate()` in a thread
+4. Scores extracted from `eval_result.result_df` (primary) or MLflow traces (fallback)
 
 ### Score Extraction (`evaluation.py`)
 - Primary: `_extract_scores_from_result()` reads `result_df`
@@ -164,10 +170,11 @@ Use truthiness check on `guidelines` value (not `hasattr`), checking both `model
 - `EvalRowResult`: `{ row_index, variables, rendered_prompt, response, score, score_rationale, score_details: ScoreDetail[] | None }`
 - `ScoreDetail`: `{ name, value: float|str|None, rationale: str|None }`
 - `EvalResponse`: `{ prompt_name, prompt_version, model_name, dataset, total_rows, results, avg_score, run_id, experiment_url }`
+- `RunResponse`: `{ rendered_prompt, response, model, usage, run_id, experiment_url }`
 
 ### Frontend (TypeScript — `types.ts`)
-- `PromptTemplate`: `{ template, raw_template, system_prompt, variables, ... }`
-- `RunResponse`: `{ content, system_prompt, ... }`
+- `PromptTemplate`: `{ name, version, template, variables, tags, aliases }`
+- `RunResponse`: `{ rendered_prompt, response, model, usage: { prompt_tokens?, completion_tokens?, total_tokens? }, run_id?, experiment_url? }`
 - `JudgeDetail`: `{ name, type: 'custom'|'guidelines', instructions, guidelines }`
 
 ---

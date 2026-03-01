@@ -13,13 +13,13 @@ Two-tab app: **Playground** and **Evaluate**. The Evaluate tab is always mounted
 │  Left panel (w-80)  │  Right panel (flex-1)                │
 │                     │                                       │
 │  Prompt Registry    │  PromptPreview  (h-3/5, fixed)       │
-│  catalog / schema   │  ─ Chat/Raw toggle in header         │
-│                     │  ─ Edit mode: system + user textareas│
-│  Experiment select  │  ─ Preview mode: rendered panels     │
-│  + filter checkbox  │                                       │
-│                     │  ResponsePanel  (flex-1, ~40%)        │
-│  PromptSelector     │  ─ Response text                     │
-│  ─ prompt dropdown  │  ─ Score / rationale (if scored)     │
+│  catalog / schema   │  ─ Preview mode: rendered template   │
+│                     │  ─ Edit mode: single textarea        │
+│  Experiment select  │                                       │
+│  + filter checkbox  │  ResponsePanel  (flex-1, ~40%)       │
+│                     │  ─ Response text                     │
+│  PromptSelector     │  ─ Score / rationale (if scored)     │
+│  ─ prompt dropdown  │                                       │
 │  ─ version list     │                                       │
 │                     │                                       │
 │  VariableInputs     │                                       │
@@ -80,27 +80,25 @@ Holds all "shared" state lifted to the top:
 Two modes controlled by `usePromptEditor`:
 
 **Preview mode** (default):
-- Chat view: indigo System panel + gray User panel when system present; plain text otherwise
-- Raw view: full XML string (HTML-escaped so `<system>` renders as literal text, not invisible HTML)
-- Auto-switches to Chat when system prompt detected, Raw when absent
-- Chat button disabled when no system prompt (`opacity-40 cursor-not-allowed`)
+- Renders the template string with variable values substituted in-place
+- Unfilled `{{variables}}` show as-is in the rendered output
+- "New Version" button only shown when `isLatestVersion` is true
 
-**Edit mode** (New Version):
-- Chat view: System textarea (indigo, optional, `rows=3`) + User textarea (gray, `flex-1`)
-- Raw view: single textarea with full XML content
-- Local `localSystem` / `localUser` state; changes rebuild XML via `buildXmlTemplate` → call `onDraftChange`
-- Toggle syncs: Chat→Raw (draft already up-to-date); Raw→Chat (re-parse draft)
-- On edit entry: parse draft → init `localSystem` / `localUser`, reset to Chat mode
+**Edit mode** (triggered by "New Version" button):
+- Single textarea containing the full template string
+- Variable extraction debounced 300ms as user types (`parseTemplateVariables`)
+- Save opens a dialog prompting for a version description
 - "Register Version" button disabled when `!isDirty`
 
 ### JudgeForm.tsx — Create/Edit Judge (slide-over)
 - Two judge types: **Custom** (free-form instructions textarea) and **Guidelines** (list of rule inputs)
-- Name validation: `^[a-z][a-z0-9_]*$` — red border + inline error on invalid
+- Name validation: any non-empty string accepted (Pydantic `min_length=1` only; no frontend regex)
+- "Add variable" button inserts `{{ trace }}` or `{{ expectations }}` into the instructions field
 - Edit mode: name field read-only; success banner stays visible after save (form stays open)
 - Create mode: form closes after save, new judge auto-selected
 
 ### EvaluatePanel.tsx — Inline Subcomponents
-- `TemplatePreview`: collapsible; shows indigo System + gray User panels when system prompt present
+- `TemplatePreview`: collapsible; shows the raw template string for the selected prompt version
 - `JudgePreview`: collapsible; lazy-loads detail on expand; renders numbered circle list for guidelines type, plain text for custom type
 
 ### SearchableSelect.tsx
@@ -124,6 +122,12 @@ const isLatestVersion = !versions.length || !selectedVersion || selectedVersion 
 ```
 "New Version" button in PromptPreview only shown when `isLatestVersion` is true (or already in edit mode).
 
+### usePromptEditor State
+```ts
+activeTemplate = isEditing ? draftTemplate : (template?.template || null)
+isDirty = isEditing && draftTemplate !== (template?.template || '')
+```
+
 ---
 
 ## Overlay / Z-index Layer
@@ -141,8 +145,6 @@ ConfirmDialog: `fixed inset-0 z-50 flex items-center justify-center`
 ## Visual Design Conventions
 
 - **Brand color**: `databricks-red` (`#FF3621`) — buttons, focus rings, accents
-- **System prompt**: indigo (`bg-indigo-50 border-indigo-100`) panels
-- **User prompt**: gray (`bg-gray-50 border-gray-200`) panels
 - **Template variables**: purple highlight (`bg-purple-100 text-purple-700`)
 - **Guideline numbers**: purple circle badges (`bg-purple-100 text-purple-700 rounded-full`)
 - **Success states**: green (`bg-green-50 border-green-200 text-green-700`)
