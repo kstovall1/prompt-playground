@@ -1,5 +1,6 @@
 """API routes for running prompts against models."""
 
+import re
 import logging
 import mlflow
 from fastapi import APIRouter, HTTPException
@@ -12,6 +13,24 @@ from server.llm import call_model
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["run"])
+
+_VAR_MAX_LEN = 50_000
+_TEMPLATE_PATTERN = re.compile(r"\{\{\s*\w+\s*\}\}")
+
+
+def _validate_variables(variables: dict[str, str]) -> None:
+    """Raise HTTPException if any variable value is too long or contains template syntax."""
+    for key, value in variables.items():
+        if len(value) > _VAR_MAX_LEN:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Variable '{key}' exceeds the {_VAR_MAX_LEN:,}-character limit.",
+            )
+        if _TEMPLATE_PATTERN.search(value):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Variable '{key}' contains template syntax ({{{{...}}}}). Variable values cannot contain {{{{variable}}}} patterns.",
+            )
 
 
 class RunRequest(BaseModel):
@@ -75,6 +94,7 @@ def _log_run_artifacts(run_id: str, rendered: str, result: dict, request: RunReq
 @router.post("/run", response_model=RunResponse)
 async def api_run_prompt(request: RunRequest):
     """Run a prompt with variable substitution against a selected model."""
+    _validate_variables(request.variables)
     prompt_data = _load_prompt_data(request)
     rendered = render_template(prompt_data["template"], request.variables)
 

@@ -162,6 +162,24 @@ export function useEvalColumns(catalog: string, schema: string, table: string | 
   return { columns, loading };
 }
 
+export function useTablePreview(catalog: string, schema: string, table: string | null) {
+  const [columns, setColumns] = useState<string[]>([]);
+  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!table) { setColumns([]); setRows([]); return; }
+    setLoading(true);
+    const params = new URLSearchParams({ catalog, schema, table, limit: '3' });
+    apiFetch<{ columns: string[]; rows: Record<string, string>[] }>(`/eval/table-preview?${params.toString()}`)
+      .then((d) => { setColumns(d.columns); setRows(d.rows); })
+      .catch(() => { setColumns([]); setRows([]); })
+      .finally(() => setLoading(false));
+  }, [catalog, schema, table]);
+
+  return { columns, rows, loading };
+}
+
 export function useRunEval() {
   const [result, setResult] = useState<EvalResponse | null>(null);
 

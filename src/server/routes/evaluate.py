@@ -242,6 +242,19 @@ async def api_get_columns(catalog: str, schema: str, table: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/table-preview")
+async def api_table_preview(catalog: str, schema: str, table: str, limit: int = 3):
+    """Return column names and a small sample of rows for the dataset preview UI."""
+    try:
+        cols, rows = await asyncio.gather(
+            asyncio.to_thread(get_table_columns, catalog, schema, table),
+            asyncio.to_thread(read_table_rows, catalog, schema, table, limit=limit),
+        )
+        return {"columns": cols, "rows": rows}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # --- Evaluation run ---
 
 class EvalRequest(BaseModel):
@@ -314,6 +327,18 @@ async def api_run_evaluation(request: EvalRequest):
 
     if not rows:
         raise HTTPException(status_code=400, detail="Dataset is empty")
+
+    # Pre-flight: verify all mapped columns actually exist in the dataset
+    available_cols = set(rows[0].keys())
+    missing_cols = {col for col in request.column_mapping.values() if col not in available_cols}
+    if missing_cols:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Column(s) not found in dataset: {', '.join(sorted(missing_cols))}. "
+                f"Available columns: {', '.join(sorted(available_cols))}"
+            ),
+        )
 
     dataset_full_name = f"{request.dataset_catalog}.{request.dataset_schema}.{request.dataset_table}"
 
