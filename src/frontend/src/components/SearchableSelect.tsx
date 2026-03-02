@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react';
 export interface SelectOption {
   value: string;
   label: string;
+  description?: string;
 }
 
 export interface SelectGroup {
@@ -59,7 +60,8 @@ export default function SearchableSelect({
       ? opts.filter(
           (o) =>
             o.label.toLowerCase().includes(q) ||
-            o.value.toLowerCase().includes(q),
+            o.value.toLowerCase().includes(q) ||
+            (o.description?.toLowerCase().includes(q) ?? false),
         )
       : opts;
 
@@ -110,13 +112,16 @@ export default function SearchableSelect({
                 key={o.value}
                 type="button"
                 onMouseDown={() => handleSelect(o.value)}
-                className={`w-full text-left px-3 py-1.5 text-sm transition-colors hover:bg-red-50 hover:text-databricks-red ${
+                className={`w-full text-left px-3 py-1.5 transition-colors hover:bg-red-50 hover:text-databricks-red ${
                   o.value === value
                     ? 'bg-red-50 text-databricks-red font-medium'
                     : 'text-gray-700'
                 }`}
               >
-                {o.label}
+                <span className="block text-sm">{o.label}</span>
+                {o.description && (
+                  <span className="block text-[10px] text-gray-400 mt-0.5 font-normal">{o.description}</span>
+                )}
               </button>
             ))}
           </div>
@@ -135,13 +140,16 @@ export default function SearchableSelect({
         key={o.value || '__empty__'}
         type="button"
         onMouseDown={() => handleSelect(o.value)}
-        className={`w-full text-left px-3 py-1.5 text-sm transition-colors hover:bg-red-50 hover:text-databricks-red ${
+        className={`w-full text-left px-3 py-1.5 transition-colors hover:bg-red-50 hover:text-databricks-red ${
           o.value === value
             ? 'bg-red-50 text-databricks-red font-medium'
             : 'text-gray-700'
         }`}
       >
-        {o.label}
+        <span className="block text-sm">{o.label}</span>
+        {o.description && (
+          <span className="block text-[10px] text-gray-400 mt-0.5 font-normal">{o.description}</span>
+        )}
       </button>
     ));
   };

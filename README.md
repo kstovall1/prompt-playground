@@ -269,6 +269,52 @@ databricks bundle destroy
 
 ## Local Development
 
+### Run the server locally
+
+The app runs as a FastAPI server served from `src/`. The React frontend is pre-built — no Node.js needed to run locally.
+
+**1. Authenticate with Databricks:**
+
+```bash
+databricks auth login --host https://<your-workspace>.azuredatabricks.net
+```
+
+**2. Install dependencies:**
+
+```bash
+# With pip
+pip install -r src/requirements.txt
+
+# Or with uv
+uv pip install -r src/requirements.txt
+```
+
+**3. Set required environment variables:**
+
+```bash
+export PROMPT_CATALOG="your_catalog"
+export PROMPT_SCHEMA="prompts"
+export EVAL_SCHEMA="eval_data"
+export SQL_WAREHOUSE_ID="abc1234def567890"   # needed for eval; find in SQL > Warehouses > Connection details
+# Optional: scope model dropdown to a specific experiment
+export MLFLOW_EXPERIMENT_NAME="/Shared/prompt-playground-evaluation"
+```
+
+**4. Start the server from the `src/` directory:**
+
+```bash
+cd src
+uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Open [http://localhost:8000](http://localhost:8000) in your browser.
+
+> **Note:** `--reload` enables auto-restart on Python file changes. The frontend is served from the pre-built `src/frontend/dist/` — rebuild it (`cd src/frontend && npm run build`) to pick up frontend changes.
+
+---
+
+### Run tests
+
 Run tests locally (requires Python 3.11+):
 
 **With pip:**

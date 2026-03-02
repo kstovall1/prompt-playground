@@ -1,5 +1,4 @@
-import { Play, Settings2, RotateCcw, AlertTriangle } from 'lucide-react';
-import { useState } from 'react';
+import { Play, RotateCcw, AlertTriangle } from 'lucide-react';
 
 interface Props {
   canRun: boolean;
@@ -7,63 +6,13 @@ interface Props {
   onRun: (params: { max_tokens: number; temperature: number }) => void;
   onReset: () => void;
   unfilledVars?: string[];
+  maxTokens: number;
+  temperature: number;
 }
 
-export default function RunControls({ canRun, loading, onRun, onReset, unfilledVars = [] }: Props) {
-  const [showSettings, setShowSettings] = useState(false);
-  const [maxTokens, setMaxTokens] = useState(4096);
-  const [temperature, setTemperature] = useState(1.0);
-
+export default function RunControls({ canRun, loading, onRun, onReset, unfilledVars = [], maxTokens, temperature }: Props) {
   return (
     <div className="space-y-3">
-      {/* Advanced settings toggle */}
-      <button
-        onClick={() => setShowSettings(!showSettings)}
-        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
-      >
-        <Settings2 className="w-3.5 h-3.5" />
-        <span>{showSettings ? 'Hide' : 'Show'} settings</span>
-      </button>
-
-      {showSettings && (
-        <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-medium text-gray-600">
-                Max Tokens
-              </label>
-              <span className="text-xs text-gray-500">{maxTokens}</span>
-            </div>
-            <input
-              type="range"
-              min={256}
-              max={16384}
-              step={256}
-              value={maxTokens}
-              onChange={(e) => setMaxTokens(Number(e.target.value))}
-              className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-databricks-red"
-            />
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-medium text-gray-600">
-                Temperature
-              </label>
-              <span className="text-xs text-gray-500">{temperature.toFixed(1)}</span>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.1}
-              value={temperature}
-              onChange={(e) => setTemperature(Number(e.target.value))}
-              className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-databricks-red"
-            />
-          </div>
-        </div>
-      )}
-
       {/* Unfilled variable warning */}
       {unfilledVars.length > 0 && (
         <div className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">

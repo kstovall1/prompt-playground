@@ -10,7 +10,6 @@ import PromptPreview from './components/PromptPreview';
 import ResponsePanel from './components/ResponsePanel';
 import EvaluatePanel from './components/EvaluatePanel';
 import HowToTab from './components/HowToTab';
-import SearchableSelect from './components/SearchableSelect';
 import PromptForm from './components/PromptForm';
 import { Loader2 } from 'lucide-react';
 import {
@@ -28,7 +27,7 @@ import {
 import { usePromptEditor } from './hooks/usePromptEditor';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('playground');
+  const [activeTab, setActiveTab] = useState<Tab>('prompts');
   const [showCreatePrompt, setShowCreatePrompt] = useState(false);
 
   // Load catalog/schema config from backend (set via app.yaml env vars)
@@ -64,6 +63,8 @@ export default function App() {
 
   // Model state
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [maxTokens, setMaxTokens] = useState(4096);
+  const [temperature, setTemperature] = useState(1.0);
 
   // API hooks
   const {
@@ -83,7 +84,7 @@ export default function App() {
     error: modelsError,
     refresh: refreshModels,
   } = useModels();
-  const { experiments, loading: experimentsLoading } = useExperiments(activeCatalog, activeSchema);
+  const { experiments, loading: experimentsLoading } = useExperiments();
   const { promptNames: experimentPromptNames } = useExperimentPrompts(experimentName);
   const filteredPrompts = (filterByExperiment && experimentPromptNames)
     ? prompts.filter((p) => experimentPromptNames.includes(p.name))
@@ -119,6 +120,11 @@ export default function App() {
     setSelectedPrompt(null);
     setSelectedVersion(null);
     setVariableValues({});
+  }, []);
+
+  const handleExperimentChange = useCallback((name: string) => {
+    setExperimentName(name);
+    setFilterByExperiment(true);
   }, []);
 
   // Handle prompt selection - clear variables and exit edit mode
@@ -169,6 +175,11 @@ export default function App() {
      editor.isEditing, editor.draftTemplate, activeCatalog, activeSchema, editor.newPromptName, experimentName]
   );
 
+  const handleReset = useCallback(() => {
+    reset();
+    setVariableValues({});
+  }, [reset]);
+
   const canRun = !!(
     selectedModel &&
     !templateLoading &&
@@ -190,19 +201,25 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
-      <Header />
+      <Header
+        experimentName={experimentName}
+        experiments={experiments}
+        experimentsLoading={experimentsLoading}
+        onExperimentChange={handleExperimentChange}
+      />
 
       <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
 
 
       <main className="flex-1 overflow-hidden">
         {activeTab === 'howto' && <HowToTab />}
+
+        {/* Evaluate tab */}
         <div className={activeTab !== 'evaluate' ? 'hidden' : 'h-full'}>
           <EvaluatePanel
             evalCatalog={config?.eval_catalog ?? activeCatalog}
             evalSchema={config?.eval_schema ?? 'eval_data'}
             prompts={filteredPrompts}
-            allPromptsCount={prompts.length}
             versions={versions}
             selectedPrompt={selectedPrompt}
             selectedVersion={selectedVersion}
@@ -213,18 +230,16 @@ export default function App() {
             onSelectModel={setSelectedModel}
             template={template}
             experimentName={experimentName}
-            experiments={experiments}
-            experimentsLoading={experimentsLoading}
-            onExperimentChange={setExperimentName}
-            filterByExperiment={filterByExperiment}
-            onToggleFilter={setFilterByExperiment}
           />
         </div>
-        <div className={`h-full max-w-screen-2xl mx-auto flex ${activeTab !== 'playground' ? 'hidden' : ''}`}>
-          {/* Left Panel - Controls */}
-          <div className="w-80 xl:w-96 flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
-            <div className="p-4 space-y-6">
-              {/* Prompt registry catalog/schema */}
+
+        {/* Prompts tab — browse, manage, edit */}
+        <div className={`h-full flex ${activeTab !== 'prompts' ? 'hidden' : ''}`}>
+          {/* Left Panel - Prompt browser */}
+          <div className="w-1/3 min-w-[280px] flex-shrink-0 border-r border-gray-200 bg-white flex flex-col overflow-hidden">
+            {/* Fixed top — registry */}
+            <div className="flex-shrink-0 p-4 border-b border-gray-100">
+              {/* Prompt Registry catalog/schema */}
               <div>
                 <label className="section-label">Prompt Registry</label>
                 <div className="flex items-center gap-1">
@@ -246,34 +261,27 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Experiment selector */}
-              <div>
-                <label className="section-label">Experiment</label>
-                <SearchableSelect
-                  value={experimentName}
-                  onChange={setExperimentName}
-                  disabled={experimentsLoading}
-                  placeholder={experimentsLoading ? 'Loading...' : 'None (all prompts)'}
-                  options={experiments.map((e) => ({ value: e.name, label: e.name }))}
-                />
-                {experimentName && (
-                  <label className="mt-1.5 flex items-center gap-1.5 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={filterByExperiment}
-                      onChange={(e) => setFilterByExperiment(e.target.checked)}
-                      className="w-3 h-3 rounded accent-databricks-red"
-                    />
-                    <span className="text-[11px] text-gray-500">
-                      Filter prompts to this experiment
-                      {filterByExperiment && experimentPromptNames && (
-                        <span className="text-gray-400"> ({filteredPrompts.length} of {prompts.length})</span>
-                      )}
-                    </span>
-                  </label>
-                )}
-              </div>
+              {/* Experiment filter toggle — only shown when an experiment is selected */}
+              {experimentName && (
+                <label className="mt-3 flex items-center gap-1.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={filterByExperiment}
+                    onChange={(e) => setFilterByExperiment(e.target.checked)}
+                    className="w-3 h-3 rounded accent-databricks-red"
+                  />
+                  <span className="text-xs text-gray-500">
+                    Filter to experiment
+                    {filterByExperiment && experimentPromptNames && (
+                      <span className="text-gray-400"> ({filteredPrompts.length} of {prompts.length})</span>
+                    )}
+                  </span>
+                </label>
+              )}
+            </div>
 
+            {/* Flexible middle — PromptSelector grows to fill */}
+            <div className="flex-1 overflow-hidden p-4">
               <PromptSelector
                 prompts={filteredPrompts}
                 promptsLoading={promptsLoading}
@@ -287,6 +295,74 @@ export default function App() {
                 onRefresh={refreshPrompts}
                 onCreateNew={() => setShowCreatePrompt(true)}
               />
+            </div>
+
+            {/* Sticky footer — Test in Playground */}
+            <div className="flex-shrink-0 p-4 border-t border-gray-200 bg-white">
+              <button
+                onClick={() => setActiveTab('playground')}
+                disabled={!selectedPrompt || !selectedVersion}
+                className="w-full py-2 px-4 rounded-md text-sm font-medium bg-databricks-red text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Test in Playground →
+              </button>
+            </div>
+          </div>
+
+          {/* Right Panel - Full-height PromptPreview */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-hidden">
+              <PromptPreview
+                template={editor.activeTemplate}
+                variables={editor.activeVariables}
+                values={variableValues}
+                isEditing={editor.isEditing}
+                isLatestVersion={!versions.length || !selectedVersion || selectedVersion === versions[0]?.version}
+                onToggleEdit={editor.toggleEdit}
+                draftTemplate={editor.draftTemplate}
+                onDraftChange={editor.setDraftTemplate}
+                onDraftVariablesChange={editor.setDraftVariables}
+                onSave={editor.save}
+                saveLoading={saveLoading || createLoading}
+                saveError={saveError || createError}
+                isDirty={editor.isDirty}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Playground tab — fill variables, run, iterate */}
+        <div className={`h-full flex ${activeTab !== 'playground' ? 'hidden' : ''}`}>
+          {/* Left Panel - Run controls */}
+          <div className="w-1/3 min-w-[280px] flex-shrink-0 border-r border-gray-200 bg-white flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {/* Loaded prompt indicator */}
+              <div>
+                <label className="section-label">Prompt</label>
+                {selectedPrompt && selectedVersion ? (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-medium text-gray-700">
+                        {selectedPrompt.split('.').pop()}
+                      </span>
+                      <span className="ml-2 text-xs text-gray-400">v{selectedVersion}</span>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('prompts')}
+                      className="text-xs text-databricks-red hover:underline"
+                    >
+                      Change →
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setActiveTab('prompts')}
+                    className="text-sm text-databricks-red hover:underline"
+                  >
+                    Select a prompt →
+                  </button>
+                )}
+              </div>
 
               {editor.activeVariables.length > 0 && (
                 <VariableInputs
@@ -303,14 +379,23 @@ export default function App() {
                 selectedModel={selectedModel}
                 onSelectModel={setSelectedModel}
                 onRefresh={refreshModels}
+                maxTokens={maxTokens}
+                temperature={temperature}
+                onMaxTokensChange={setMaxTokens}
+                onTemperatureChange={setTemperature}
               />
+            </div>
 
+            {/* Sticky Run Footer */}
+            <div className="flex-shrink-0 p-4 border-t border-gray-200 bg-white">
               <RunControls
                 canRun={canRun}
                 loading={runLoading}
                 onRun={handleRun}
-                onReset={reset}
+                onReset={handleReset}
                 unfilledVars={unfilledVars}
+                maxTokens={maxTokens}
+                temperature={temperature}
               />
             </div>
           </div>

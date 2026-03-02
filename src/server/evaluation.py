@@ -19,6 +19,7 @@ BUILTIN_SCORERS = {
     "fluency": "Fluency",
     "completeness": "Completeness",
     "summarization": "Summarization",
+    "correctness": "Correctness",
 }
 
 # Type alias: row_index -> (summary_score, rationale, per-guideline details or None)
@@ -36,6 +37,7 @@ def mlflow_genai_evaluate(
     scorer_name: str | None = None,
     judge_model: str | None = None,
     judge_temperature: float = 0.0,
+    expectations_data: list[str | None] | None = None,
 ) -> tuple[str | None, dict[int, RowScore]]:
     """Run mlflow.genai.evaluate(), link prompt version, extract per-row scores.
 
@@ -47,13 +49,15 @@ def mlflow_genai_evaluate(
     mlflow.set_experiment(exp_name)
 
     # Build eval dataset in correct MLflow 3 GenAI format
-    eval_data = [
-        {
+    eval_data = []
+    for idx, (_, rendered, response_text) in enumerate(row_data):
+        entry: dict = {
             "inputs": {"request": rendered},
             "outputs": {"response": response_text},
         }
-        for _, rendered, response_text in row_data
-    ]
+        if expectations_data and idx < len(expectations_data) and expectations_data[idx]:
+            entry["expectations"] = {"expected_response": expectations_data[idx]}
+        eval_data.append(entry)
 
     # Use a registered MLflow judge if specified, otherwise fall back to built-in quality scorer
     scorers = _resolve_scorers(scorer_name, model_name, judge_model, judge_temperature)

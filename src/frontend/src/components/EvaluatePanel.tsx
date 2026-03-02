@@ -1,26 +1,27 @@
 import { useState, useEffect } from 'react';
-import { FlaskConical, Loader2, ChevronDown, ChevronUp, FileText, Plus, Pencil, Trash2, Eye, Table2 } from 'lucide-react';
+import { FlaskConical, Loader2, ChevronDown, ChevronUp, Plus, Pencil, Trash2, Eye, RotateCcw, Wand2, X } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
+import TemplatePreview from './TemplatePreview';
 import type { PromptInfo, PromptVersion, PromptTemplate } from '../types';
 import { useEvalTables, useEvalColumns, useTablePreview, useRunEval, useJudges, useDeleteJudge, useJudgeDetail } from '../hooks/useEvalApi';
 import { parseTemplateVariables } from '../utils/templateUtils';
 import JudgeForm from './eval/JudgeForm';
-import EvalResults from './eval/EvalResults';
+import DatasetTable from './eval/DatasetTable';
 import ConfirmDialog from './ConfirmDialog';
 
 const BUILTIN_JUDGES = [
-  { value: 'safety', label: 'Safety' },
-  { value: 'relevance_to_query', label: 'Relevance to Query' },
-  { value: 'fluency', label: 'Fluency' },
-  { value: 'completeness', label: 'Completeness' },
-  { value: 'summarization', label: 'Summarization' },
+  { value: 'safety', label: 'Safety', description: 'Detects harmful, offensive, or toxic content in responses' },
+  { value: 'relevance_to_query', label: 'Relevance to Query', description: 'Checks if the response addresses the input question' },
+  { value: 'fluency', label: 'Fluency', description: 'Evaluates clarity and readability of the response' },
+  { value: 'completeness', label: 'Completeness', description: 'Assesses whether the response fully answers the question' },
+  { value: 'summarization', label: 'Summarization', description: 'Rates the quality of a summarization response' },
+  { value: 'correctness', label: 'Correctness', description: 'Checks response against a ground-truth expected answer — requires selecting an expected response column' },
 ];
 
 interface Props {
   evalCatalog: string;
   evalSchema: string;
   prompts: PromptInfo[];
-  allPromptsCount: number;
   versions: PromptVersion[];
   selectedPrompt: string | null;
   selectedVersion: string | null;
@@ -31,43 +32,8 @@ interface Props {
   onSelectModel: (name: string) => void;
   template: PromptTemplate | null;
   experimentName: string;
-  experiments: { name: string }[];
-  experimentsLoading: boolean;
-  onExperimentChange: (name: string) => void;
-  filterByExperiment: boolean;
-  onToggleFilter: (val: boolean) => void;
 }
 
-function TemplatePreview({ template }: { template: PromptTemplate }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const highlighted = template.template.replace(
-    /\{\{(\s*\w+\s*)\}\}/g,
-    '<mark class="bg-purple-100 text-purple-700 rounded px-0.5 not-italic">{{$1}}</mark>'
-  );
-
-  return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
-      >
-        <FileText className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-        <span className="text-xs font-semibold text-gray-600 flex-1">Prompt Template</span>
-        {expanded
-          ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
-          : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-        }
-      </button>
-      {expanded && (
-        <div
-          className="px-3 py-2.5 text-xs font-mono text-gray-700 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto bg-white"
-          dangerouslySetInnerHTML={{ __html: highlighted }}
-        />
-      )}
-    </div>
-  );
-}
 
 function JudgePreview({ name }: { name: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -113,67 +79,11 @@ function JudgePreview({ name }: { name: string }) {
   );
 }
 
-function TablePreview({ catalog, schema, table }: { catalog: string; schema: string; table: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const { columns, rows, loading } = useTablePreview(expanded ? catalog : '', expanded ? schema : '', expanded ? table : null);
-
-  return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden mt-2">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
-      >
-        <Table2 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-        <span className="text-xs font-semibold text-gray-600 flex-1">Dataset Preview</span>
-        {loading && <Loader2 className="w-3 h-3 animate-spin text-gray-400" />}
-        {!loading && (expanded
-          ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
-          : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-        )}
-      </button>
-      {expanded && (
-        <div className="bg-white overflow-x-auto">
-          {loading ? (
-            <p className="px-3 py-2 text-xs text-gray-400">Loading preview...</p>
-          ) : columns.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-gray-400 italic">Could not load preview.</p>
-          ) : (
-            <table className="w-full text-[11px]">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  {columns.map((col) => (
-                    <th key={col} className="px-2 py-1.5 text-left font-semibold text-gray-500 whitespace-nowrap">{col}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, i) => (
-                  <tr key={i} className="border-b border-gray-50 last:border-0">
-                    {columns.map((col) => (
-                      <td key={col} className="px-2 py-1.5 text-gray-700 max-w-[160px] truncate" title={String(row[col] ?? '')}>
-                        {String(row[col] ?? '')}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-                {rows.length === 0 && (
-                  <tr><td colSpan={columns.length} className="px-2 py-1.5 text-gray-400 italic">No rows returned.</td></tr>
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function EvaluatePanel({
   evalCatalog, evalSchema,
-  prompts, allPromptsCount, versions, selectedPrompt, selectedVersion,
+  prompts, versions, selectedPrompt, selectedVersion,
   onSelectPrompt, onSelectVersion, models, selectedModel, onSelectModel,
-  template, experimentName, experiments, experimentsLoading, onExperimentChange,
-  filterByExperiment, onToggleFilter,
+  template, experimentName,
 }: Props) {
   const [localEvalCatalog, setLocalEvalCatalog] = useState(evalCatalog);
   const [localEvalSchema, setLocalEvalSchema] = useState(evalSchema);
@@ -181,6 +91,7 @@ export default function EvaluatePanel({
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
   const [maxRows, setMaxRows] = useState(5);
   const [scorerName, setScorerName] = useState<string | null>(null);
+  const [expectationsColumn, setExpectationsColumn] = useState<string | null>(null);
   const [judgeModel, setJudgeModel] = useState<string>('');
   const [judgeTemperature, setJudgeTemperature] = useState(0);
   const [showCreateJudge, setShowCreateJudge] = useState(false);
@@ -191,6 +102,7 @@ export default function EvaluatePanel({
   const { judges, loading: judgesLoading, refresh: refreshJudges } = useJudges(experimentName);
   const { tables, loading: tablesLoading, error: tablesError } = useEvalTables(localEvalCatalog, localEvalSchema);
   const { columns } = useEvalColumns(localEvalCatalog, localEvalSchema, selectedTable);
+  const { columns: previewCols, rows: previewRows, totalRows, loading: previewLoading } = useTablePreview(localEvalCatalog, localEvalSchema, selectedTable);
   const { result, loading, error, runEval, reset } = useRunEval();
 
   // Auto-select latest version when versions load and none is selected
@@ -206,6 +118,11 @@ export default function EvaluatePanel({
     if (!selectedVersionData?.template_preview) return [];
     return parseTemplateVariables(selectedVersionData.template_preview);
   })();
+
+  // Clamp maxRows to actual dataset size once totalRows is known
+  useEffect(() => {
+    if (totalRows !== null && maxRows > totalRows) setMaxRows(totalRows);
+  }, [totalRows]);
 
   // Auto-populate mapping when columns load: if variable name exactly matches a column, pre-select it
   useEffect(() => {
@@ -224,7 +141,8 @@ export default function EvaluatePanel({
   }, [columns, variables]);
 
   const canRun = !!(selectedPrompt && selectedVersion && selectedModel && selectedTable &&
-    variables.every((v) => columnMapping[v]));
+    variables.every((v) => columnMapping[v]) &&
+    (scorerName !== 'correctness' || !!expectationsColumn));
 
   const handleRun = async () => {
     if (!canRun || !selectedPrompt || !selectedVersion || !selectedModel || !selectedTable) return;
@@ -242,13 +160,15 @@ export default function EvaluatePanel({
       scorer_name: scorerName || undefined,
       judge_model: judgeModel || undefined,
       judge_temperature: judgeTemperature,
+      expectations_column: expectationsColumn || undefined,
     });
   };
 
   return (
     <div className="h-full flex overflow-hidden">
       {/* Left config panel */}
-      <div className="w-80 xl:w-96 flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto p-4 space-y-5">
+      <div className="w-1/3 min-w-[272px] flex-shrink-0 border-r border-gray-200 bg-white flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-4 space-y-5">
 
         {/* Eval dataset — catalog, schema, and table in one group */}
         <div>
@@ -282,38 +202,20 @@ export default function EvaluatePanel({
               options={tables.map((t) => ({ value: t, label: t }))}
             />
           )}
-          {selectedTable && (
-            <TablePreview catalog={localEvalCatalog} schema={localEvalSchema} table={selectedTable} />
-          )}
+          <div className="mt-3">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              Max Rows <span className="font-normal text-gray-400">({maxRows}{totalRows !== null ? ` of ${totalRows}` : ''})</span>
+            </label>
+            <input
+              type="range" min={1} max={totalRows ?? 20} value={maxRows}
+              onChange={(e) => setMaxRows(Number(e.target.value))}
+              className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-databricks-red"
+            />
+          </div>
         </div>
 
-        {/* Experiment picker */}
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Experiment</label>
-          <SearchableSelect
-            value={experimentName}
-            onChange={onExperimentChange}
-            disabled={experimentsLoading}
-            placeholder={experimentsLoading ? 'Loading...' : 'None (all prompts)'}
-            options={experiments.map((e) => ({ value: e.name, label: e.name }))}
-          />
-          {experimentName && (
-            <label className="mt-1.5 flex items-center gap-1.5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={filterByExperiment}
-                onChange={(e) => onToggleFilter(e.target.checked)}
-                className="w-3 h-3 rounded accent-databricks-red"
-              />
-              <span className="text-[11px] text-gray-500">
-                Filter prompts to this experiment
-                {filterByExperiment && (
-                  <span className="text-gray-400"> ({prompts.length} of {allPromptsCount})</span>
-                )}
-              </span>
-            </label>
-          )}
-        </div>
+        {/* ── Prompt ───────────────────────────────────── */}
+        <hr className="border-gray-100" />
 
         {/* Prompt picker */}
         <div>
@@ -346,6 +248,9 @@ export default function EvaluatePanel({
         {template && selectedVersion && (
           <TemplatePreview template={template} />
         )}
+
+        {/* ── Scoring ──────────────────────────────────── */}
+        <hr className="border-gray-100" />
 
         {/* Judge (registered scorer) picker */}
         <div>
@@ -387,7 +292,10 @@ export default function EvaluatePanel({
           </div>
           <SearchableSelect
             value={scorerName || ''}
-            onChange={(val) => setScorerName(val || null)}
+            onChange={(val) => {
+              setScorerName(val || null);
+              if (val !== 'correctness') setExpectationsColumn(null);
+            }}
             disabled={judgesLoading}
             placeholder="Default quality scorer"
             groups={[
@@ -402,31 +310,46 @@ export default function EvaluatePanel({
             <JudgePreview key={scorerName} name={scorerName} />
           )}
 
+          {/* Expectations column — only shown when Correctness scorer is selected */}
+          {scorerName === 'correctness' && (
+            <div className="mt-3 pl-3 border-l-2 border-gray-200">
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                Expected response column
+              </label>
+              <SearchableSelect
+                value={expectationsColumn || ''}
+                onChange={(val) => setExpectationsColumn(val || null)}
+                placeholder="Select column..."
+                options={columns.map((c) => ({ value: c, label: c }))}
+              />
+              <p className="mt-1 text-[11px] text-gray-400">
+                The column containing the ground-truth expected response for each row.
+              </p>
+            </div>
+          )}
+
           {/* Judge model + temperature — only relevant for the default quality scorer */}
           {!scorerName && (
-            <div className="mt-3 space-y-3 pl-3 border-l-2 border-gray-100">
+            <div className="mt-3 space-y-3 pl-3 border-l-2 border-gray-200">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                  Judge Model
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                  Judge model
                 </label>
                 <SearchableSelect
-                  value={judgeModel}
-                  onChange={(val) => setJudgeModel(val)}
-                  placeholder="Same as prompt model"
+                  value={judgeModel || selectedModel || ''}
+                  onChange={(val) => setJudgeModel(val === selectedModel ? '' : val)}
+                  placeholder="Select model..."
                   options={models.filter((m) => m.state === 'READY').map((m) => ({ value: m.name, label: m.name }))}
                 />
-                <p className="mt-1 text-[11px] text-gray-400">
-                  Which model evaluates the responses. Defaults to the prompt model above.
-                </p>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                  Judge Temperature <span className="font-normal text-gray-400">({judgeTemperature.toFixed(1)})</span>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                  Judge temperature <span className="text-gray-400">({judgeTemperature.toFixed(1)})</span>
                 </label>
                 <input
                   type="range" min={0} max={1} step={0.1} value={judgeTemperature}
                   onChange={(e) => setJudgeTemperature(Number(e.target.value))}
-                  className="w-full accent-databricks-red"
+                  className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-databricks-red"
                 />
                 <p className="mt-1 text-[11px] text-gray-400">
                   Lower = more consistent scores. Keep at 0 unless you want varied judgments.
@@ -436,9 +359,12 @@ export default function EvaluatePanel({
           )}
         </div>
 
+        {/* ── Run Config ───────────────────────────────── */}
+        <hr className="border-gray-100" />
+
         {/* Model picker */}
         <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Model</label>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Model Endpoint</label>
           <SearchableSelect
             value={selectedModel || ''}
             onChange={(val) => onSelectModel(val)}
@@ -451,23 +377,48 @@ export default function EvaluatePanel({
         {/* Column mapping */}
         {selectedTable && variables.length > 0 && (
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-              Map Variables → Columns
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Map Variables → Columns
+              </label>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => {
+                    setColumnMapping((prev) => {
+                      const next = { ...prev };
+                      for (const v of variables) {
+                        if (columns.includes(v)) next[v] = v;
+                      }
+                      return next;
+                    });
+                  }}
+                  className="flex items-center gap-0.5 text-[11px] text-databricks-red hover:text-red-700 font-medium"
+                  title="Auto-map variables to columns with matching names"
+                >
+                  <Wand2 className="w-3 h-3" /> Auto
+                </button>
+                <button
+                  onClick={() => setColumnMapping({})}
+                  className="text-[11px] text-gray-400 hover:text-gray-600"
+                  title="Clear all column mappings"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
             <div className="space-y-2">
               {[...variables].sort((a, b) => {
                 const posA = columns.indexOf(a);
                 const posB = columns.indexOf(b);
                 return (posA === -1 ? 999 : posA) - (posB === -1 ? 999 : posB);
               }).map((v) => (
-                <div key={v} className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded w-32 truncate">{`{{${v}}}`}</span>
+                <div key={v} className="space-y-1">
+                  <span className="text-xs font-mono text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded inline-block max-w-full truncate">{`{{${v}}}`}</span>
                   <SearchableSelect
                     value={columnMapping[v] || ''}
                     onChange={(val) => setColumnMapping((prev) => ({ ...prev, [v]: val }))}
                     placeholder="column..."
                     options={columns.map((c) => ({ value: c, label: c }))}
-                    className="flex-1"
                   />
                 </div>
               ))}
@@ -475,30 +426,30 @@ export default function EvaluatePanel({
           </div>
         )}
 
-        {/* Max rows */}
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-            Max Rows <span className="font-normal text-gray-400">({maxRows})</span>
-          </label>
-          <input
-            type="range" min={1} max={20} value={maxRows}
-            onChange={(e) => setMaxRows(Number(e.target.value))}
-            className="w-full accent-databricks-red"
-          />
-        </div>
+      </div>{/* end scrollable config */}
 
-        {/* Run button */}
-        <button
-          onClick={handleRun}
-          disabled={!canRun || loading}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-databricks-red text-white text-sm font-medium rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-red-700 transition-colors"
-        >
-          {loading ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> Running evaluation...</>
-          ) : (
-            <><FlaskConical className="w-4 h-4" /> Run Evaluation</>
-          )}
-        </button>
+      {/* ── Sticky Run Footer ──────────────────────────── */}
+      <div className="flex-shrink-0 p-4 border-t border-gray-200 bg-white space-y-2">
+        <div className="flex gap-2">
+          <button
+            onClick={handleRun}
+            disabled={!canRun || loading}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-databricks-red text-white text-sm font-medium rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-red-700 transition-colors"
+          >
+            {loading ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Running evaluation...</>
+            ) : (
+              <><FlaskConical className="w-4 h-4" /> Run Evaluation</>
+            )}
+          </button>
+          <button
+            onClick={() => { reset(); setColumnMapping({}); }}
+            className="px-3 py-2.5 border border-gray-200 rounded-lg text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
+            title="Clear results and column mapping"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+        </div>
 
         {!canRun && !loading && (
           <p className="text-xs text-gray-400 text-center">
@@ -506,28 +457,34 @@ export default function EvaluatePanel({
              !selectedVersion ? 'Select a version' :
              !selectedModel ? 'Select a model' :
              !selectedTable ? 'Select a dataset' :
-             'Map all variables to columns'}
+             !variables.every((v) => columnMapping[v]) ? 'Map all variables to columns' :
+             scorerName === 'correctness' && !expectationsColumn ? 'Select an expected response column' :
+             ''}
           </p>
         )}
       </div>
+      </div>{/* end left panel */}
 
-      {/* Right results panel */}
-      <div className="flex-1 overflow-y-auto p-4">
+      {/* Right panel — dataset preview + results */}
+      <div className="flex-1 overflow-hidden flex flex-col">
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">{error}</div>
-        )}
-
-        {loading && !result && (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <Loader2 className="w-8 h-8 animate-spin text-databricks-red mx-auto mb-3" />
-              <p className="text-sm font-medium text-gray-600">Running {maxRows} rows through the model and scoring...</p>
-              <p className="text-xs text-gray-400 mt-1">MLflow evaluate is running the LLM judge — this may take a minute</p>
-            </div>
+          <div className="bg-red-50 border border-red-200 border-b-0 px-4 py-3 text-sm text-red-700 flex-shrink-0">
+            {error}
           </div>
         )}
-
-        {!result && !loading && !error && (
+        {selectedTable ? (
+          <DatasetTable
+            previewColumns={previewCols}
+            previewRows={previewRows}
+            previewLoading={previewLoading}
+            variables={variables}
+            columnMapping={columnMapping}
+            result={result}
+            loading={loading}
+            maxRows={maxRows}
+            scorerName={scorerName}
+          />
+        ) : (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <FlaskConical className="w-10 h-10 text-gray-300 mx-auto mb-3" />
@@ -536,8 +493,6 @@ export default function EvaluatePanel({
             </div>
           </div>
         )}
-
-        {result && <EvalResults result={result} scorerName={scorerName} />}
       </div>
 
       {/* Delete judge confirmation */}

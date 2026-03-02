@@ -98,7 +98,7 @@ Two modes controlled by `usePromptEditor`:
 - Create mode: form closes after save, new judge auto-selected
 
 ### EvaluatePanel.tsx — Inline Subcomponents
-- `TemplatePreview`: collapsible; shows the raw template string for the selected prompt version
+- `TemplatePreview`: collapsible; strips `<system>`/`<user>` XML tags and normalizes `\n` escapes by default; "Raw" toggle (shown only when template has XML tags) reveals full template with tags
 - `JudgePreview`: collapsible; lazy-loads detail on expand; renders numbered circle list for guidelines type, plain text for custom type
 
 ### SearchableSelect.tsx

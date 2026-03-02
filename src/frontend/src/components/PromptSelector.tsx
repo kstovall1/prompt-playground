@@ -44,9 +44,9 @@ export default function PromptSelector({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col h-full space-y-4">
       {/* Prompt name selector */}
-      <div>
+      <div className="flex-shrink-0">
         <div className="flex items-center justify-between mb-1.5">
           <label className="section-label">Prompt</label>
           <div className="flex items-center gap-1.5">
@@ -104,14 +104,14 @@ export default function PromptSelector({
 
       {/* Version selector */}
       {selectedPrompt && (
-        <div>
-          <label className="section-label">Version</label>
+        <div className="flex flex-col flex-1 min-h-0">
+          <label className="section-label flex-shrink-0">Version</label>
           {versionsLoading ? (
             <div className="text-xs text-gray-500 py-2">Loading versions...</div>
           ) : versions.length === 0 ? (
             <div className="text-xs text-gray-500 py-2">No versions found</div>
           ) : (
-            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            <div className="space-y-1.5 flex-1 overflow-y-auto">
               {versions.map((v) => {
                 const isSelected = selectedVersion === v.version;
                 return (
@@ -151,7 +151,7 @@ export default function PromptSelector({
                     )}
                     {v.template_preview && (
                       <div className="mt-1 ml-5 text-[11px] text-gray-400 truncate">
-                        {v.template_preview}
+                        {v.template_preview.replace(/<\/?(?:system|user)>\n?/g, '').replace(/\\n|\n/g, ' ').trim()}
                       </div>
                     )}
                   </button>

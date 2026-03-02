@@ -1,8 +1,9 @@
-import { FlaskConical, Play, BookOpen } from 'lucide-react';
+import { FlaskConical, Play, BookOpen, Library } from 'lucide-react';
 
-export type Tab = 'playground' | 'evaluate' | 'howto';
+export type Tab = 'prompts' | 'playground' | 'evaluate' | 'howto';
 
 const TABS: { id: Tab; label: string; icon: typeof Play }[] = [
+  { id: 'prompts', label: 'Prompts', icon: Library },
   { id: 'playground', label: 'Playground', icon: Play },
   { id: 'evaluate', label: 'Evaluate', icon: FlaskConical },
   { id: 'howto', label: 'How to Use', icon: BookOpen },

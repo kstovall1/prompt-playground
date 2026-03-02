@@ -9,7 +9,7 @@ from server.mlflow_client import get_prompt_template
 from server.templates import render_template
 from server.mlflow_helpers import configure_mlflow, get_experiment_id, experiment_url, get_mlflow_client, EXPERIMENT_NAME
 from server.llm import call_model
-from server.warehouse import list_eval_tables, get_table_columns, read_table_rows
+from server.warehouse import list_eval_tables, get_table_columns, read_table_rows, count_table_rows
 from server.evaluation import mlflow_genai_evaluate
 
 logger = logging.getLogger(__name__)
@@ -243,14 +243,15 @@ async def api_get_columns(catalog: str, schema: str, table: str):
 
 
 @router.get("/table-preview")
-async def api_table_preview(catalog: str, schema: str, table: str, limit: int = 3):
-    """Return column names and a small sample of rows for the dataset preview UI."""
+async def api_table_preview(catalog: str, schema: str, table: str, limit: int = 20):
+    """Return column names, a sample of rows, and total row count for the dataset preview UI."""
     try:
-        cols, rows = await asyncio.gather(
+        cols, rows, total_rows = await asyncio.gather(
             asyncio.to_thread(get_table_columns, catalog, schema, table),
             asyncio.to_thread(read_table_rows, catalog, schema, table, limit=limit),
+            asyncio.to_thread(count_table_rows, catalog, schema, table),
         )
-        return {"columns": cols, "rows": rows}
+        return {"columns": cols, "rows": rows, "total_rows": total_rows}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -271,6 +272,7 @@ class EvalRequest(BaseModel):
     scorer_name: str | None = None  # registered MLflow judge name; falls back to built-in quality scorer
     judge_model: str | None = None  # model for the default quality scorer; falls back to model_name if not set
     judge_temperature: float = 0.0  # temperature for the default quality scorer; lower = more consistent
+    expectations_column: str | None = None  # dataset column with ground-truth expected responses (for Correctness scorer)
 
 
 class ScoreDetail(BaseModel):
@@ -328,9 +330,12 @@ async def api_run_evaluation(request: EvalRequest):
     if not rows:
         raise HTTPException(status_code=400, detail="Dataset is empty")
 
-    # Pre-flight: verify all mapped columns actually exist in the dataset
+    # Pre-flight: verify all mapped columns (including expectations) actually exist in the dataset
     available_cols = set(rows[0].keys())
-    missing_cols = {col for col in request.column_mapping.values() if col not in available_cols}
+    all_required_cols = set(request.column_mapping.values())
+    if request.expectations_column:
+        all_required_cols.add(request.expectations_column)
+    missing_cols = {col for col in all_required_cols if col not in available_cols}
     if missing_cols:
         raise HTTPException(
             status_code=400,
@@ -350,6 +355,9 @@ async def api_run_evaluation(request: EvalRequest):
             var: str(row.get(col, "")) for var, col in request.column_mapping.items()
         }
         rendered = render_template(prompt_data["template"], variables)
+        expectations_val = (
+            str(row.get(request.expectations_column, "")) if request.expectations_column else None
+        )
         async with sem:
             try:
                 model_result = await call_model(
@@ -360,13 +368,18 @@ async def api_run_evaluation(request: EvalRequest):
                 response_text = model_result["content"]
             except Exception as e:
                 response_text = f"[ERROR: {e}]"
-        return (i, variables, rendered, response_text)
+        return (i, variables, rendered, response_text, expectations_val)
 
     results_raw = await asyncio.gather(*[run_row(i, row) for i, row in enumerate(rows)])
+    sorted_results = sorted(results_raw)
     row_data: list[tuple[dict, str, str]] = [
         (variables, rendered, response_text)
-        for _, variables, rendered, response_text in sorted(results_raw)
+        for _, variables, rendered, response_text, _ in sorted_results
     ]
+    expectations_data: list[str | None] | None = (
+        [expectations_val for _, _, _, _, expectations_val in sorted_results]
+        if request.expectations_column else None
+    )
 
     # Run mlflow.genai.evaluate() in a thread (all MLflow calls are synchronous)
     run_id = None
@@ -386,6 +399,7 @@ async def api_run_evaluation(request: EvalRequest):
             request.scorer_name,
             request.judge_model,
             request.judge_temperature,
+            expectations_data,
         )
         if run_id:
             exp_id = get_experiment_id(request.experiment_name)

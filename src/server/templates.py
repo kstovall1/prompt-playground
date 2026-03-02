@@ -23,7 +23,7 @@ def render_template(template: str, variables: dict[str, str]) -> str:
     for key, value in variables.items():
         result = re.sub(
             r"\{\{\s*" + re.escape(key) + r"\s*\}\}",
-            value,
+            lambda m, v=value: v,
             result,
         )
     return result

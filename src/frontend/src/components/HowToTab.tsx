@@ -18,6 +18,10 @@ import {
   Table2,
   Star,
   ArrowLeftRight,
+  FileText,
+  RotateCcw,
+  Wand2,
+  Eye,
 } from 'lucide-react';
 
 function Section({ icon: Icon, title, color, children }: {
@@ -115,26 +119,32 @@ export default function HowToTab() {
               <p className="text-sm text-gray-300 leading-relaxed">
                 The Databricks Prompt Registry stores and versions prompts, but testing and evaluating them
                 requires writing Python code. This app gives anyone on your team a UI to
-                do all of that — test prompts against models, fill in variables interactively, run batch
+                do all of that — browse and edit prompts, test them against models, run batch
                 evaluations against datasets, and track every result in Experiments — without writing any code.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Tab integration */}
-        <Section icon={ArrowLeftRight} title="How the Two Tabs Work Together" color="bg-indigo-50 text-indigo-700">
+        {/* Tab overview */}
+        <Section icon={ArrowLeftRight} title="How the Three Tabs Work Together" color="bg-indigo-50 text-indigo-700">
           <p className="text-xs text-gray-500 mb-4">
-            The <strong>Playground</strong> and <strong>Evaluate</strong> tabs share the same prompt, version, and model
-            selection. Your choices carry over automatically when you switch tabs, and all panel state (eval dataset,
-            column mapping, judge config) is preserved — the natural workflow is to test manually first, then run a
-            batch evaluation.
+            The three tabs — <strong>Prompts</strong>, <strong>Playground</strong>, and <strong>Evaluate</strong> — share
+            the same prompt, version, and model selection. Your choices carry over automatically when you switch tabs,
+            and all panel state (eval dataset, column mapping, judge config) is preserved.
+            The natural workflow is: browse and pick a prompt, test it interactively, then run a batch evaluation.
           </p>
           <div className="flex flex-wrap items-center gap-2 justify-center mb-5">
+            <div className="flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border text-center bg-gray-50 border-gray-200">
+              <FileText className="w-5 h-5 text-gray-500" />
+              <span className="text-xs font-semibold text-gray-700">Prompts</span>
+              <span className="text-[10px] text-gray-400 leading-tight">Browse registry<br/>Pick prompt + version</span>
+            </div>
+            <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
             <div className="flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border text-center bg-red-50 border-databricks-red/30">
               <Play className="w-5 h-5 text-databricks-red" />
               <span className="text-xs font-semibold text-databricks-red">Playground</span>
-              <span className="text-[10px] text-gray-400 leading-tight">Pick prompt + model<br/>Test with sample inputs</span>
+              <span className="text-[10px] text-gray-400 leading-tight">Fill variables<br/>Test with sample inputs</span>
             </div>
             <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
             <div className="flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border text-center bg-purple-50 border-purple-300">
@@ -150,10 +160,9 @@ export default function HowToTab() {
             of Databricks — separate from this app, where you can compare versions and review traces over time.
           </p>
           <Tip>
-            You don't need to re-select your prompt or model in the Evaluate tab. If you've already configured
-            a prompt version and model in Playground, those selections carry over automatically — just pick a
-            dataset and map the columns. Your eval dataset, column mapping, and judge config are also preserved
-            when you switch back and forth.
+            You don't need to re-select your prompt or model when switching tabs. If you've already configured
+            a prompt version and model in Playground, those selections carry over automatically to Evaluate — just
+            pick a dataset and map the columns.
           </Tip>
         </Section>
 
@@ -177,7 +186,7 @@ export default function HowToTab() {
                 Source of truth for prompts. Engineers register versions with{' '}
                 <code className="bg-white border border-gray-200 px-1 rounded">{'{{variable}}'}</code>{' '}
                 placeholders and aliases like <code className="bg-white border border-gray-200 px-1 rounded">production</code>.
-                Stored in Unity Catalog — set the catalog and schema fields in the app to point to yours.
+                Stored in Unity Catalog — set the catalog and schema fields in the Prompts tab to point to yours.
               </p>
             </div>
             <div className="bg-gray-50 rounded-lg p-3 space-y-1.5">
@@ -211,41 +220,71 @@ export default function HowToTab() {
           </div>
         </Section>
 
-        {/* Playground tab */}
-        <Section icon={Play} title="Playground Tab — Step by Step" color="bg-red-50 text-databricks-red">
+        {/* Prompts tab */}
+        <Section icon={FileText} title="Prompts Tab — Browse, Manage, Edit" color="bg-gray-50 text-gray-700">
           <div className="space-y-4">
-            <Step num={1} icon={Tag} title="Select a Prompt and Version">
-              Browse prompts registered in the MLflow Prompt Registry. The catalog and schema fields
-              at the top of the left panel control which registry to load from. Use the searchable dropdown
-              to filter as you type. Select the prompt name, then pick a version — versions with a{' '}
-              <strong>production</strong> alias are the ones currently deployed.
+            <Step num={1} icon={GitBranch} title="Set the Prompt Registry Location">
+              Enter the <strong>catalog</strong> and <strong>schema</strong> where your MLflow Prompt Registry
+              prompts live. The app loads all prompts from that location. Use the{' '}
+              <strong>Experiment</strong> selector in the header to scope the prompt list to only prompts
+              that have been run in a specific MLflow experiment — a count badge shows how many match.
+            </Step>
+            <Step num={2} icon={Tag} title="Browse Prompts and Versions">
+              Select a prompt from the searchable dropdown. The version list populates automatically —
+              click any version to select it. Each version card shows a short preview of the template with{' '}
+              <code className="bg-gray-100 px-1 rounded">{'{{variable}}'}</code> placeholders, description,
+              and any aliases (like <code className="bg-gray-100 px-1 rounded">production</code>).
               <br /><br />
-              <strong>No prompt yet?</strong> Click the <strong>+</strong> icon next to the Prompt label to
-              create one directly from the app — fill in a name, optional description, and template, and it's
-              registered in the Prompt Registry immediately.
+              The <strong>Prompt Preview</strong> panel on the right shows the full template with variables
+              highlighted. If the template uses{' '}
+              <code className="bg-gray-100 px-1 rounded">&lt;system&gt;</code>{' '}and{' '}
+              <code className="bg-gray-100 px-1 rounded">&lt;user&gt;</code>{' '}XML tags, the preview strips them
+              by default — click <strong>Raw</strong> in the header to see the full template with tags.
             </Step>
-            <Step num={2} icon={Braces} title="Fill in Template Variables">
-              Once you select a version, the app reads the template and renders an input field for every{' '}
-              <code className="bg-gray-100 px-1 rounded">{'{{variable}}'}</code> placeholder. The{' '}
-              <strong>Prompt Preview</strong> panel on the right updates live as you type — showing exactly
-              what will be sent to the model.
-              <br /><br />
-              To modify the template, click <strong>Edit</strong> in the Preview panel. Saving creates a new
-              version automatically — the original version is never changed.
+            <Step num={3} icon={Braces} title="Edit or Create Prompts">
+              Click <strong>New Version</strong> in the Preview panel header to edit the template in a
+              textarea. Saving registers a new version in the Prompt Registry — the original is never changed.
+              Click the <strong>+</strong> icon next to the Prompt label to create a brand-new prompt from scratch.
             </Step>
-            <Step num={3} icon={Cpu} title="Select a Model">
-              Choose any READY serving endpoint from the searchable model dropdown. Foundation Model API
-              endpoints appear first. You can also test against custom fine-tuned endpoints.
-            </Step>
-            <Step num={4} icon={SlidersHorizontal} title="Configure and Run">
-              Expand <strong>Run Settings</strong> to adjust Max Tokens and Temperature if needed,
-              then click <strong>Run Prompt</strong>. The response appears with token usage, and a{' '}
-              <strong>View in Experiment ↗</strong> link lets you jump directly to the run in Databricks.
+            <Step num={4} icon={Play} title="Test in Playground">
+              Once you've selected a prompt and version, click <strong>Test in Playground →</strong> at
+              the bottom of the left panel. Your selection carries over automatically — you land in the
+              Playground with the prompt and version already loaded.
             </Step>
             <Tip>
-              <strong>Experiment filter:</strong> select an MLflow experiment from the Experiment dropdown
-              to scope the prompt list to only prompts that have been run in that experiment. A count badge
-              shows how many prompts match. Uncheck the filter checkbox to see all prompts again.
+              <strong>No prompt yet?</strong> Click the <strong>+</strong> icon next to "Prompt" to register
+              a new prompt — fill in a name, optional description, and template, and it's registered immediately.
+              You can test it in Playground right away without reloading.
+            </Tip>
+          </div>
+        </Section>
+
+        {/* Playground tab */}
+        <Section icon={Play} title="Playground Tab — Test Interactively" color="bg-red-50 text-databricks-red">
+          <div className="space-y-4">
+            <Step num={1} icon={Tag} title="Load a Prompt">
+              The prompt and version you selected in the <strong>Prompts tab</strong> carry over automatically.
+              If nothing is selected yet, click <strong>Select a prompt →</strong> to go to the Prompts tab.
+              The loaded prompt name and version are shown at the top of the left panel — click{' '}
+              <strong>Change →</strong> to go back and switch.
+            </Step>
+            <Step num={2} icon={Braces} title="Fill in Template Variables">
+              Input fields appear for every{' '}
+              <code className="bg-gray-100 px-1 rounded">{'{{variable}}'}</code> in the template.
+              The <strong>Prompt Preview</strong> panel updates live as you type — showing exactly what will
+              be sent to the model, with unfilled variables highlighted in amber.
+              <br /><br />
+              An orange warning badge appears at the bottom if any variables are empty when you click Run —
+              you can still run with empty variables, the warning is informational.
+            </Step>
+            <Step num={3} icon={Cpu} title="Select a Model and Run">
+              Choose any READY serving endpoint from the model dropdown. Adjust Max Tokens and Temperature
+              in <strong>Run Settings</strong> if needed, then click <strong>Run Prompt</strong>. The response
+              appears in the bottom panel with token usage and a <strong>View in Experiment ↗</strong> link.
+            </Step>
+            <Tip>
+              <strong>Reset button</strong> (↺ next to Run): clears both the response panel <em>and</em> all
+              variable inputs — useful when switching to a different test case.
             </Tip>
             <Tip>
               <strong>Then switch to Evaluate:</strong> your prompt, version, and model carry over automatically.
@@ -255,26 +294,25 @@ export default function HowToTab() {
         </Section>
 
         {/* Evaluate tab */}
-        <Section icon={FlaskConical} title="Evaluate Tab — Step by Step" color="bg-purple-50 text-purple-700">
+        <Section icon={FlaskConical} title="Evaluate Tab — Batch Evaluation" color="bg-purple-50 text-purple-700">
           <div className="space-y-4">
             <Step num={1} icon={Table2} title="Pick an Eval Dataset">
               Set the eval dataset catalog and schema at the top of the left panel, then pick a table
               from the searchable dropdown. The app reads the table schema automatically — columns
               load into the variable mapping section once a table is selected.
             </Step>
-            <Step num={2} icon={Tag} title="Select Experiment, Prompt, and Version">
-              Optionally select an <strong>Experiment</strong> from the dropdown to scope the prompt list
-              to only prompts run in that experiment — a count badge shows how many match. Then pick a
-              prompt and version from the searchable dropdowns. Expand <strong>Prompt Template</strong> to
-              review the full template with variable placeholders highlighted before running.
-              If you came from Playground, your prompt and version are already set.
+            <Step num={2} icon={Tag} title="Select Prompt and Version">
+              If you came from Playground, your prompt and version are already set. Otherwise pick them
+              from the searchable dropdowns. Expand <strong>Prompt Preview</strong> to review the full
+              template with variable placeholders highlighted — click <strong>Raw</strong> to see the
+              template with any XML tags if needed.
             </Step>
             <Step num={3} icon={Star} title="Configure the Judge">
               The <strong>Judge</strong> section controls how responses are scored after the model runs.
               Options:
               <ul className="mt-2 space-y-1 list-none">
                 <li><strong>Default quality scorer</strong> — a built-in 1–5 LLM-as-judge. Set <strong>Judge Model</strong> (defaults to the same model as the prompt) and <strong>Judge Temperature</strong> (keep at 0 for consistent scores).</li>
-                <li className="mt-1"><strong>Built-in presets</strong> — Safety, Relevance to Query, Fluency, Completeness, Summarization — managed by Databricks, no config needed.</li>
+                <li className="mt-1"><strong>Built-in presets</strong> — Safety, Relevance to Query, Fluency, Completeness, Summarization, Correctness — managed by Databricks, no config needed.</li>
                 <li className="mt-1"><strong>Registered judges</strong> — reusable, saved per-experiment. Click <strong>+ New</strong> to create one:</li>
               </ul>
               <ul className="mt-1.5 ml-3 space-y-0.5 list-none">
@@ -282,10 +320,6 @@ export default function HowToTab() {
                 <li><em>Guidelines</em> — define a checklist of specific rules. Each rule is evaluated independently; results show a per-rule pass/fail breakdown in the results panel.</li>
               </ul>
               <br />
-              Judge names must be lowercase letters, digits, and underscores, starting with a letter
-              (e.g. <code className="bg-gray-100 px-1 rounded">tone_check</code>). The form enforces this
-              and shows an error if the name doesn't match.
-              <br /><br />
               To <strong>edit</strong> a registered judge, select it from the dropdown and click the pencil
               icon. To <strong>delete</strong> it, click the trash icon — a confirmation dialog will appear
               before anything is removed.
@@ -293,14 +327,19 @@ export default function HowToTab() {
             <Step num={4} icon={Link2} title="Select Model, Map Variables, and Run">
               Pick the model to call for each row. Then map each{' '}
               <code className="bg-gray-100 px-1 rounded">{'{{variable}}'}</code> to a column from the
-              dataset — exact name matches are pre-filled automatically. Set <strong>Max Rows</strong>{' '}
-              (1–20) and click <strong>Run Evaluation</strong>.
+              dataset. Click <strong>Auto</strong> (✦ wand icon) to automatically fill in any variables
+              whose names exactly match a column name. Use the <strong>×</strong> button to clear all
+              mappings and start over.
               <br /><br />
-              Results appear as expandable cards showing the score, rationale, and full response.
-              For <strong>Guidelines judges</strong>, each card shows a per-rule pass/fail checklist so
-              you can see exactly which rules each response passed. The average score shows in the summary
-              header.
+              Set <strong>Max Rows</strong> (1–20) and click <strong>Run Evaluation</strong>. Results appear
+              as expandable cards showing the score, rationale, and full response. For{' '}
+              <strong>Guidelines judges</strong>, each card shows a per-rule pass/fail checklist.
+              The average score shows in the summary header.
             </Step>
+            <Tip>
+              <strong>Reset button</strong> (↺ next to Run Evaluation): clears the results table <em>and</em>{' '}
+              the column mapping — useful when switching to a different dataset or version.
+            </Tip>
             <Tip>
               <strong>Back in Databricks:</strong> the eval run is logged to the experiment with an{' '}
               <code>eval_type: batch</code> tag and avg score metric.

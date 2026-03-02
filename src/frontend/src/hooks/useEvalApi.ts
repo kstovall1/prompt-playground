@@ -2,25 +2,21 @@ import { useState, useEffect, useCallback } from 'react';
 import type { ExperimentInfo, JudgeInfo, EvalResponse } from '../types';
 import { apiFetch, useMutation } from './useApi';
 
-export function useExperiments(catalog: string = '', schema: string = '') {
+export function useExperiments() {
   const [experiments, setExperiments] = useState<ExperimentInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (catalog) params.set('catalog', catalog);
-      if (schema) params.set('schema', schema);
-      const query = params.toString() ? `?${params.toString()}` : '';
-      const data = await apiFetch<{ experiments: ExperimentInfo[] }>(`/eval/experiments${query}`);
+      const data = await apiFetch<{ experiments: ExperimentInfo[] }>('/eval/experiments');
       setExperiments(data.experiments);
     } catch {
       setExperiments([]);
     } finally {
       setLoading(false);
     }
-  }, [catalog, schema]);
+  }, []);
 
   useEffect(() => {
     refresh();
@@ -162,22 +158,23 @@ export function useEvalColumns(catalog: string, schema: string, table: string | 
   return { columns, loading };
 }
 
-export function useTablePreview(catalog: string, schema: string, table: string | null) {
+export function useTablePreview(catalog: string, schema: string, table: string | null, limit = 20) {
   const [columns, setColumns] = useState<string[]>([]);
   const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [totalRows, setTotalRows] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!table) { setColumns([]); setRows([]); return; }
+    if (!table) { setColumns([]); setRows([]); setTotalRows(null); return; }
     setLoading(true);
-    const params = new URLSearchParams({ catalog, schema, table, limit: '3' });
-    apiFetch<{ columns: string[]; rows: Record<string, string>[] }>(`/eval/table-preview?${params.toString()}`)
-      .then((d) => { setColumns(d.columns); setRows(d.rows); })
-      .catch(() => { setColumns([]); setRows([]); })
+    const params = new URLSearchParams({ catalog, schema, table, limit: String(limit) });
+    apiFetch<{ columns: string[]; rows: Record<string, string>[]; total_rows: number }>(`/eval/table-preview?${params.toString()}`)
+      .then((d) => { setColumns(d.columns); setRows(d.rows); setTotalRows(d.total_rows); })
+      .catch(() => { setColumns([]); setRows([]); setTotalRows(null); })
       .finally(() => setLoading(false));
   }, [catalog, schema, table]);
 
-  return { columns, rows, loading };
+  return { columns, rows, totalRows, loading };
 }
 
 export function useRunEval() {
@@ -198,6 +195,7 @@ export function useRunEval() {
       scorer_name?: string;
       judge_model?: string;
       judge_temperature?: number;
+      expectations_column?: string;
     }) => {
       setResult(null);
       const data = await apiFetch<EvalResponse>('/eval/run', {
