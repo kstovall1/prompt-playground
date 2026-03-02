@@ -39,6 +39,7 @@ export interface EvalRowResult {
   row_index: number;
   variables: Record<string, string>;
   rendered_prompt: string;
+  rendered_system_prompt?: string | null;
   response: string;
   score: number | string | null;
   score_rationale: string | null;

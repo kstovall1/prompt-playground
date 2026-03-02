@@ -20,17 +20,13 @@ interface Props {
   isDirty: boolean;
 }
 
-function renderPreview(template: string, values: Record<string, string>): string {
-  let result = template;
-  for (const [key, value] of Object.entries(values)) {
-    const regex = new RegExp(`\\{\\{\\s*${escapeRegex(key)}\\s*\\}\\}`, 'g');
-    result = result.replace(regex, value || `{{${key}}}`);
-  }
-  return result;
-}
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function highlightVars(tpl: string, values: Record<string, string>): string {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return esc(tpl).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key) => {
+    const val = values[key.trim()];
+    const display = val ? esc(val) : `{{${key.trim()}}}`;
+    return `<span class="inline-block bg-purple-100 text-purple-700 rounded px-1 font-mono text-xs">${display}</span>`;
+  });
 }
 
 export default function PromptPreview({
@@ -290,27 +286,11 @@ export default function PromptPreview({
         <div className="flex-1 p-4 overflow-auto">
           {(() => {
             const src = isDirty ? draftTemplate : (template || '');
-            const highlight = (t: string) =>
-              renderPreview(t, values).replace(
-                /\{\{\s*(\w+)\s*\}\}/g,
-                '<span class="inline-block bg-amber-100 text-amber-800 rounded px-1 font-mono text-xs">{{$1}}</span>'
-              );
             if (previewMode === 'raw') {
-              const rawHighlight = (t: string) => {
-                const rendered = renderPreview(t, values);
-                const escaped = rendered
-                  .replace(/&/g, '&amp;')
-                  .replace(/</g, '&lt;')
-                  .replace(/>/g, '&gt;');
-                return escaped.replace(
-                  /\{\{\s*(\w+)\s*\}\}/g,
-                  '<span class="inline-block bg-amber-100 text-amber-800 rounded px-1 font-mono text-xs">{{$1}}</span>'
-                );
-              };
               return (
                 <div
                   className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap font-mono bg-gray-50 rounded-lg p-4"
-                  dangerouslySetInnerHTML={{ __html: rawHighlight(src) }}
+                  dangerouslySetInnerHTML={{ __html: highlightVars(src, values) }}
                 />
               );
             }
@@ -322,14 +302,14 @@ export default function PromptPreview({
                     <div className="text-[10px] font-semibold text-indigo-500 uppercase tracking-widest mb-1.5">System</div>
                     <div
                       className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap font-mono"
-                      dangerouslySetInnerHTML={{ __html: highlight(system) }}
+                      dangerouslySetInnerHTML={{ __html: highlightVars(system, values) }}
                     />
                   </div>
                   <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
                     <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">User</div>
                     <div
                       className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap font-mono"
-                      dangerouslySetInnerHTML={{ __html: highlight(user) }}
+                      dangerouslySetInnerHTML={{ __html: highlightVars(user, values) }}
                     />
                   </div>
                 </div>
@@ -338,7 +318,7 @@ export default function PromptPreview({
             return (
               <div
                 className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap font-mono bg-gray-50 rounded-lg p-4"
-                dangerouslySetInnerHTML={{ __html: highlight(src) }}
+                dangerouslySetInnerHTML={{ __html: highlightVars(src, values) }}
               />
             );
           })()}

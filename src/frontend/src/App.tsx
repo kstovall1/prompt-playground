@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Header from './components/Header';
 import TabBar from './components/TabBar';
 import type { Tab } from './components/TabBar';
+import ConfirmDialog from './components/ConfirmDialog';
 import PromptSelector from './components/PromptSelector';
 import VariableInputs from './components/VariableInputs';
 import ModelSelector from './components/ModelSelector';
@@ -28,6 +29,7 @@ import { usePromptEditor } from './hooks/usePromptEditor';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('prompts');
+  const [pendingTab, setPendingTab] = useState<Tab | null>(null);
   const [showCreatePrompt, setShowCreatePrompt] = useState(false);
 
   // Load catalog/schema config from backend (set via app.yaml env vars)
@@ -135,6 +137,15 @@ export default function App() {
     editor.exitEdit();
   }, [editor.exitEdit]);
 
+  const handleTabChange = useCallback((tab: Tab) => {
+    if (editor.isDirty) {
+      setPendingTab(tab);
+    } else {
+      if (editor.isEditing) editor.exitEdit();
+      setActiveTab(tab);
+    }
+  }, [editor.isDirty, editor.isEditing, editor.exitEdit]);
+
   // Handle version selection - keep variable values if same variables exist
   const handleSelectVersion = useCallback((version: string | null) => {
     setSelectedVersion(version);
@@ -208,7 +219,7 @@ export default function App() {
         onExperimentChange={handleExperimentChange}
       />
 
-      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      <TabBar activeTab={activeTab} onTabChange={handleTabChange} />
 
 
       <main className="flex-1 overflow-hidden">
@@ -230,6 +241,7 @@ export default function App() {
             onSelectModel={setSelectedModel}
             template={template}
             experimentName={experimentName}
+            onNewVersion={selectedVersion ? () => { editor.toggleEdit(); setActiveTab('prompts'); } : undefined}
           />
         </div>
 
@@ -294,6 +306,7 @@ export default function App() {
                 onSelectVersion={handleSelectVersion}
                 onRefresh={refreshPrompts}
                 onCreateNew={() => setShowCreatePrompt(true)}
+                onNewVersion={selectedVersion ? editor.toggleEdit : undefined}
               />
             </div>
 
@@ -428,6 +441,20 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {pendingTab && (
+        <ConfirmDialog
+          title="Discard unsaved changes?"
+          message="You have unsaved edits to this version. Leave without saving?"
+          confirmLabel="Discard"
+          onConfirm={() => {
+            editor.exitEdit();
+            setActiveTab(pendingTab);
+            setPendingTab(null);
+          }}
+          onCancel={() => setPendingTab(null)}
+        />
+      )}
 
       {showCreatePrompt && (
         <PromptForm

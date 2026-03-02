@@ -32,6 +32,7 @@ interface Props {
   onSelectModel: (name: string) => void;
   template: PromptTemplate | null;
   experimentName: string;
+  onNewVersion?: () => void;
 }
 
 
@@ -83,7 +84,7 @@ export default function EvaluatePanel({
   evalCatalog, evalSchema,
   prompts, versions, selectedPrompt, selectedVersion,
   onSelectPrompt, onSelectVersion, models, selectedModel, onSelectModel,
-  template, experimentName,
+  template, experimentName, onNewVersion,
 }: Props) {
   const [localEvalCatalog, setLocalEvalCatalog] = useState(evalCatalog);
   const [localEvalSchema, setLocalEvalSchema] = useState(evalSchema);
@@ -170,6 +171,55 @@ export default function EvaluatePanel({
       <div className="w-1/3 min-w-[272px] flex-shrink-0 border-r border-gray-200 bg-white flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4 space-y-5">
 
+        {/* ── 1. Prompt ───────────────────────────────── */}
+
+        {/* Prompt picker */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Prompt</label>
+          <SearchableSelect
+            value={selectedPrompt || ''}
+            onChange={(val) => { onSelectPrompt(val || null); onSelectVersion(null); setColumnMapping({}); }}
+            placeholder="Select prompt..."
+            options={prompts.map((p) => ({ value: p.name, label: p.name.split('.').pop() ?? p.name }))}
+          />
+        </div>
+
+        {/* Version picker */}
+        {selectedPrompt && (
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Version</label>
+              {onNewVersion && (
+                <button
+                  onClick={onNewVersion}
+                  className="flex items-center gap-1 text-[11px] font-medium text-databricks-red hover:text-red-700 transition-colors"
+                  title="Create a new version based on the current template"
+                >
+                  <Plus className="w-3 h-3" />
+                  New version
+                </button>
+              )}
+            </div>
+            <SearchableSelect
+              value={selectedVersion || ''}
+              onChange={(val) => { onSelectVersion(val || null); setColumnMapping({}); }}
+              placeholder="Select version..."
+              options={versions.map((v) => ({
+                value: v.version,
+                label: `v${v.version}${v.aliases.length > 0 ? ` (${v.aliases.join(', ')})` : ''}`,
+              }))}
+            />
+          </div>
+        )}
+
+        {/* Prompt template preview */}
+        {template && selectedVersion && (
+          <TemplatePreview template={template} />
+        )}
+
+        {/* ── 2. Dataset + Column Mapping ─────────────── */}
+        <hr className="border-gray-100" />
+
         {/* Eval dataset — catalog, schema, and table in one group */}
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Eval Dataset</label>
@@ -214,42 +264,72 @@ export default function EvaluatePanel({
           </div>
         </div>
 
-        {/* ── Prompt ───────────────────────────────────── */}
-        <hr className="border-gray-100" />
-
-        {/* Prompt picker */}
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Prompt</label>
-          <SearchableSelect
-            value={selectedPrompt || ''}
-            onChange={(val) => { onSelectPrompt(val || null); onSelectVersion(null); setColumnMapping({}); }}
-            placeholder="Select prompt..."
-            options={prompts.map((p) => ({ value: p.name, label: p.name.split('.').pop() ?? p.name }))}
-          />
-        </div>
-
-        {/* Version picker */}
-        {selectedPrompt && (
+        {/* Column mapping — inline under Dataset once a table is selected and prompt has variables */}
+        {selectedTable && variables.length > 0 && (
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Version</label>
-            <SearchableSelect
-              value={selectedVersion || ''}
-              onChange={(val) => { onSelectVersion(val || null); setColumnMapping({}); }}
-              placeholder="Select version..."
-              options={versions.map((v) => ({
-                value: v.version,
-                label: `v${v.version}${v.aliases.length > 0 ? ` (${v.aliases.join(', ')})` : ''}`,
-              }))}
-            />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Map Variables → Columns
+              </label>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => {
+                    setColumnMapping((prev) => {
+                      const next = { ...prev };
+                      for (const v of variables) {
+                        if (columns.includes(v)) next[v] = v;
+                      }
+                      return next;
+                    });
+                  }}
+                  className="flex items-center gap-0.5 text-[11px] text-databricks-red hover:text-red-700 font-medium"
+                  title="Auto-map variables to columns with matching names"
+                >
+                  <Wand2 className="w-3 h-3" /> Auto
+                </button>
+                <button
+                  onClick={() => setColumnMapping({})}
+                  className="text-[11px] text-gray-400 hover:text-gray-600"
+                  title="Clear all column mappings"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {[...variables].sort((a, b) => {
+                const posA = columns.indexOf(a);
+                const posB = columns.indexOf(b);
+                return (posA === -1 ? 999 : posA) - (posB === -1 ? 999 : posB);
+              }).map((v) => (
+                <div key={v} className="space-y-1">
+                  <span className="text-xs font-mono text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded inline-block max-w-full truncate">{`{{${v}}}`}</span>
+                  <SearchableSelect
+                    value={columnMapping[v] || ''}
+                    onChange={(val) => setColumnMapping((prev) => ({ ...prev, [v]: val }))}
+                    placeholder="column..."
+                    options={columns.map((c) => ({ value: c, label: c }))}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Prompt template preview */}
-        {template && selectedVersion && (
-          <TemplatePreview template={template} />
-        )}
+        {/* ── 3. Model Endpoint ──────────────────────── */}
+        <hr className="border-gray-100" />
 
-        {/* ── Scoring ──────────────────────────────────── */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Model Endpoint</label>
+          <SearchableSelect
+            value={selectedModel || ''}
+            onChange={(val) => onSelectModel(val)}
+            placeholder="Select model..."
+            options={models.filter((m) => m.state === 'READY').map((m) => ({ value: m.name, label: m.name }))}
+          />
+        </div>
+
+        {/* ── 4. Judge / Scorer ──────────────────────── */}
         <hr className="border-gray-100" />
 
         {/* Judge (registered scorer) picker */}
@@ -306,6 +386,14 @@ export default function EvaluatePanel({
             ]}
           />
 
+          {/* Description for selected built-in judge */}
+          {scorerName && BUILTIN_JUDGES.some((b) => b.value === scorerName) && (
+            <p className="mt-1.5 text-[11px] text-gray-400 leading-relaxed">
+              {BUILTIN_JUDGES.find((b) => b.value === scorerName)?.description}
+            </p>
+          )}
+
+          {/* Preview for registered (custom) judges */}
           {scorerName && !BUILTIN_JUDGES.some((b) => b.value === scorerName) && (
             <JudgePreview key={scorerName} name={scorerName} />
           )}
@@ -331,6 +419,9 @@ export default function EvaluatePanel({
           {/* Judge model + temperature — only relevant for the default quality scorer */}
           {!scorerName && (
             <div className="mt-3 space-y-3 pl-3 border-l-2 border-gray-200">
+              <p className="text-[11px] text-gray-400 leading-relaxed">
+                Scores overall response quality using an LLM judge on a 1–5 scale, evaluating helpfulness, accuracy, and completeness.
+              </p>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">
                   Judge model
@@ -359,73 +450,6 @@ export default function EvaluatePanel({
           )}
         </div>
 
-        {/* ── Run Config ───────────────────────────────── */}
-        <hr className="border-gray-100" />
-
-        {/* Model picker */}
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Model Endpoint</label>
-          <SearchableSelect
-            value={selectedModel || ''}
-            onChange={(val) => onSelectModel(val)}
-            placeholder="Select model..."
-            options={models.filter((m) => m.state === 'READY').map((m) => ({ value: m.name, label: m.name }))}
-          />
-        </div>
-
-
-        {/* Column mapping */}
-        {selectedTable && variables.length > 0 && (
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                Map Variables → Columns
-              </label>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => {
-                    setColumnMapping((prev) => {
-                      const next = { ...prev };
-                      for (const v of variables) {
-                        if (columns.includes(v)) next[v] = v;
-                      }
-                      return next;
-                    });
-                  }}
-                  className="flex items-center gap-0.5 text-[11px] text-databricks-red hover:text-red-700 font-medium"
-                  title="Auto-map variables to columns with matching names"
-                >
-                  <Wand2 className="w-3 h-3" /> Auto
-                </button>
-                <button
-                  onClick={() => setColumnMapping({})}
-                  className="text-[11px] text-gray-400 hover:text-gray-600"
-                  title="Clear all column mappings"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              {[...variables].sort((a, b) => {
-                const posA = columns.indexOf(a);
-                const posB = columns.indexOf(b);
-                return (posA === -1 ? 999 : posA) - (posB === -1 ? 999 : posB);
-              }).map((v) => (
-                <div key={v} className="space-y-1">
-                  <span className="text-xs font-mono text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded inline-block max-w-full truncate">{`{{${v}}}`}</span>
-                  <SearchableSelect
-                    value={columnMapping[v] || ''}
-                    onChange={(val) => setColumnMapping((prev) => ({ ...prev, [v]: val }))}
-                    placeholder="column..."
-                    options={columns.map((c) => ({ value: c, label: c }))}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
       </div>{/* end scrollable config */}
 
       {/* ── Sticky Run Footer ──────────────────────────── */}
@@ -443,9 +467,9 @@ export default function EvaluatePanel({
             )}
           </button>
           <button
-            onClick={() => { reset(); setColumnMapping({}); }}
+            onClick={() => reset()}
             className="px-3 py-2.5 border border-gray-200 rounded-lg text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
-            title="Clear results and column mapping"
+            title="Clear evaluation results"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
@@ -483,6 +507,7 @@ export default function EvaluatePanel({
             loading={loading}
             maxRows={maxRows}
             scorerName={scorerName}
+            template={template}
           />
         ) : (
           <div className="flex items-center justify-center h-full">

@@ -5,7 +5,6 @@ import {
   FlaskConical,
   Database,
   BarChart2,
-  Link2,
   GitBranch,
   Layers,
   Cpu,
@@ -14,14 +13,10 @@ import {
   ExternalLink,
   Tag,
   Braces,
-  SlidersHorizontal,
   Table2,
   Star,
   ArrowLeftRight,
   FileText,
-  RotateCcw,
-  Wand2,
-  Eye,
 } from 'lucide-react';
 
 function Section({ icon: Icon, title, color, children }: {
@@ -296,55 +291,66 @@ export default function HowToTab() {
         {/* Evaluate tab */}
         <Section icon={FlaskConical} title="Evaluate Tab — Batch Evaluation" color="bg-purple-50 text-purple-700">
           <div className="space-y-4">
-            <Step num={1} icon={Table2} title="Pick an Eval Dataset">
-              Set the eval dataset catalog and schema at the top of the left panel, then pick a table
-              from the searchable dropdown. The app reads the table schema automatically — columns
-              load into the variable mapping section once a table is selected.
+            <Step num={1} icon={Tag} title="Select Prompt and Version">
+              If you came from Playground, your prompt and version are already set at the top of the
+              left panel. Otherwise pick them from the searchable dropdowns. A preview of the prompt
+              template appears inline — variable placeholders are highlighted so you can confirm
+              the template before running.
             </Step>
-            <Step num={2} icon={Tag} title="Select Prompt and Version">
-              If you came from Playground, your prompt and version are already set. Otherwise pick them
-              from the searchable dropdowns. Expand <strong>Prompt Preview</strong> to review the full
-              template with variable placeholders highlighted — click <strong>Raw</strong> to see the
-              template with any XML tags if needed.
+            <Step num={2} icon={Table2} title="Pick an Eval Dataset and Map Variables">
+              Set the eval dataset catalog and schema, then pick a table from the searchable dropdown.
+              Set <strong>Max Rows</strong> (1–20) to limit how many rows to evaluate.
+              <br /><br />
+              Once a table is selected, the <strong>variable → column mapping</strong> section appears
+              inline. Map each{' '}
+              <code className="bg-gray-100 px-1 rounded">{'{{variable}}'}</code> in the prompt to a
+              column from the dataset. Click <strong>Auto</strong> (wand icon) to automatically fill
+              in any variables whose names exactly match a column name. Use the <strong>×</strong> button
+              to clear all mappings and start over.
             </Step>
-            <Step num={3} icon={Star} title="Configure the Judge">
-              The <strong>Judge</strong> section controls how responses are scored after the model runs.
-              Options:
+            <Step num={3} icon={Cpu} title="Select a Model">
+              Pick the model endpoint to call for each row. Foundation Models appear first; all
+              <strong> READY</strong> serving endpoints are listed.
+            </Step>
+            <Step num={4} icon={Star} title="Configure the Judge">
+              The <strong>Judge</strong> section controls how responses are scored. A description of
+              each scorer appears below the picker so you know what it measures before running.
               <ul className="mt-2 space-y-1 list-none">
-                <li><strong>Default quality scorer</strong> — a built-in 1–5 LLM-as-judge. Set <strong>Judge Model</strong> (defaults to the same model as the prompt) and <strong>Judge Temperature</strong> (keep at 0 for consistent scores).</li>
+                <li><strong>Default quality scorer</strong> — a built-in 1–5 LLM-as-judge (helpfulness, accuracy, completeness). Set <strong>Judge Model</strong> and <strong>Judge Temperature</strong> (keep at 0 for consistent scores).</li>
                 <li className="mt-1"><strong>Built-in presets</strong> — Safety, Relevance to Query, Fluency, Completeness, Summarization, Correctness — managed by Databricks, no config needed.</li>
                 <li className="mt-1"><strong>Registered judges</strong> — reusable, saved per-experiment. Click <strong>+ New</strong> to create one:</li>
               </ul>
               <ul className="mt-1.5 ml-3 space-y-0.5 list-none">
                 <li><em>Custom</em> — write free-form instructions describing what to score and how.</li>
-                <li><em>Guidelines</em> — define a checklist of specific rules. Each rule is evaluated independently; results show a per-rule pass/fail breakdown in the results panel.</li>
+                <li><em>Guidelines</em> — a checklist of specific rules, each evaluated independently. Results show a per-rule pass/fail breakdown.</li>
               </ul>
               <br />
-              To <strong>edit</strong> a registered judge, select it from the dropdown and click the pencil
-              icon. To <strong>delete</strong> it, click the trash icon — a confirmation dialog will appear
-              before anything is removed.
+              To <strong>edit</strong> a registered judge, select it and click the pencil icon. To
+              <strong> delete</strong> it, click the trash icon — a confirmation dialog appears first.
             </Step>
-            <Step num={4} icon={Link2} title="Select Model, Map Variables, and Run">
-              Pick the model to call for each row. Then map each{' '}
-              <code className="bg-gray-100 px-1 rounded">{'{{variable}}'}</code> to a column from the
-              dataset. Click <strong>Auto</strong> (✦ wand icon) to automatically fill in any variables
-              whose names exactly match a column name. Use the <strong>×</strong> button to clear all
-              mappings and start over.
+            <Step num={5} icon={Play} title="Run and Review Results">
+              Click <strong>Run Evaluation</strong>. The results table header updates to{' '}
+              <em>"Running Evaluation"</em> while running, then switches to <em>"Evaluation Results"</em>
+              when complete.
               <br /><br />
-              Set <strong>Max Rows</strong> (1–20) and click <strong>Run Evaluation</strong>. Results appear
-              as expandable cards showing the score, rationale, and full response. For{' '}
-              <strong>Guidelines judges</strong>, each card shows a per-rule pass/fail checklist.
-              The average score shows in the summary header.
+              A <strong>summary banner</strong> shows the average score (color-coded), prompt/version/model
+              metadata, and the MLflow Run ID (click to copy). Use the <strong>Open in Databricks</strong> button
+              (top right of the table) to jump directly to the run in the Experiments UI.
+              <br /><br />
+              In the results table: rows with low scores are highlighted in red. Click the{' '}
+              <strong>Score</strong> column header to sort ascending, descending, or back to original order.
+              Expand any row to see the <strong>rendered prompt</strong> (system + user blocks if the
+              template uses XML tags), the full response, and complete judge output.
             </Step>
             <Tip>
-              <strong>Reset button</strong> (↺ next to Run Evaluation): clears the results table <em>and</em>{' '}
-              the column mapping — useful when switching to a different dataset or version.
+              <strong>↺ Reset</strong> (next to Run Evaluation): clears the results table only. To
+              clear the column mapping separately, use the <strong>×</strong> button in the mapping
+              section header — this lets you swap datasets without losing your results.
             </Tip>
             <Tip>
               <strong>Back in Databricks:</strong> the eval run is logged to the experiment with an{' '}
-              <code>eval_type: batch</code> tag and avg score metric.
-              Per-row scores and rationales are in the Traces tab. The run is linked to the prompt version
-              for cross-version comparison.
+              <code>eval_type: batch</code> tag and avg score metric. Per-row scores and rationales
+              are in the Traces tab. The run is linked to the prompt version for cross-version comparison.
             </Tip>
           </div>
         </Section>

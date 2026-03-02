@@ -111,9 +111,7 @@ def _resolve_scorers(scorer_name: str | None, model_name: str, judge_model: str 
 def _log_dataset_input(run_id: str, dataset: str) -> None:
     """Register the UC table as an MLflow dataset input so it appears in the Experiments Datasets tab."""
     try:
-        from mlflow.data.delta_dataset_source import DeltaDatasetSource
-        from mlflow.data.meta_dataset import MetaDataset
-        ds = MetaDataset(source=DeltaDatasetSource(delta_table_name=dataset), name=dataset)
+        ds = mlflow.data.load_delta(table_name=dataset, name=dataset)
         with mlflow.start_run(run_id=run_id):
             mlflow.log_input(ds, context="eval")
     except Exception as e:

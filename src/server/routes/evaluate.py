@@ -285,6 +285,7 @@ class EvalRowResult(BaseModel):
     row_index: int
     variables: dict[str, str]
     rendered_prompt: str
+    rendered_system_prompt: str | None = None
     response: str
     score: float | str | None = None
     score_rationale: str | None = None
@@ -372,16 +373,19 @@ async def api_run_evaluation(request: EvalRequest):
                 response_text = model_result["content"]
             except Exception as e:
                 response_text = f"[ERROR: {e}]"
-        return (i, variables, rendered, response_text, expectations_val)
+        return (i, variables, rendered, rendered_system, response_text, expectations_val)
 
     results_raw = await asyncio.gather(*[run_row(i, row) for i, row in enumerate(rows)])
     sorted_results = sorted(results_raw)
     row_data: list[tuple[dict, str, str]] = [
         (variables, rendered, response_text)
-        for _, variables, rendered, response_text, _ in sorted_results
+        for _, variables, rendered, _sys, response_text, _ in sorted_results
+    ]
+    rendered_systems: list[str | None] = [
+        _sys for _, _, _, _sys, _, _ in sorted_results
     ]
     expectations_data: list[str | None] | None = (
-        [expectations_val for _, _, _, _, expectations_val in sorted_results]
+        [expectations_val for _, _, _, _, _, expectations_val in sorted_results]
         if request.expectations_column else None
     )
 
@@ -420,6 +424,7 @@ async def api_run_evaluation(request: EvalRequest):
             row_index=i,
             variables=variables,
             rendered_prompt=rendered,
+            rendered_system_prompt=rendered_systems[i] if i < len(rendered_systems) else None,
             response=response_text,
             score=score,
             score_rationale=rationale,
