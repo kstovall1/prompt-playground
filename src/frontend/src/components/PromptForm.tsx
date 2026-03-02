@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { Loader2, Plus, X } from 'lucide-react';
 import { useCreatePrompt } from '../hooks/useApi';
+import { parseSystemUser, buildXmlTemplate } from '../utils/templateUtils';
+
+type InputMode = 'chat' | 'raw';
 
 interface Props {
   catalog: string;
@@ -12,17 +15,41 @@ interface Props {
 export default function PromptForm({ catalog, schema, onSaved, onCancel }: Props) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [template, setTemplate] = useState('');
+  const [inputMode, setInputMode] = useState<InputMode>('chat');
+  // Chat mode state
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [userTemplate, setUserTemplate] = useState('');
+  // Raw mode state
+  const [rawTemplate, setRawTemplate] = useState('');
   const { create, loading, error } = useCreatePrompt();
 
   const fullName = `${catalog}.${schema}.${name.trim() || '<name>'}`;
-  const isValid = name.trim().length > 0 && template.trim().length > 0;
+  const isValid =
+    name.trim().length > 0 &&
+    (inputMode === 'chat' ? userTemplate.trim().length > 0 : rawTemplate.trim().length > 0);
+
+  const switchMode = (next: InputMode) => {
+    if (next === inputMode) return;
+    if (next === 'raw') {
+      // Serialize current chat fields into raw XML
+      setRawTemplate(buildXmlTemplate(systemPrompt, userTemplate));
+    } else {
+      // Parse raw text back into chat fields
+      const { system, user } = parseSystemUser(rawTemplate);
+      setSystemPrompt(system ?? '');
+      setUserTemplate(user);
+    }
+    setInputMode(next);
+  };
+
+  const getTemplate = () =>
+    inputMode === 'raw' ? rawTemplate.trim() : buildXmlTemplate(systemPrompt, userTemplate);
 
   const handleSave = async () => {
     try {
       const result = await create({
         name: `${catalog}.${schema}.${name.trim()}`,
-        template: template.trim(),
+        template: getTemplate(),
         description: description.trim(),
       });
       onSaved(result.name, result.version);
@@ -91,24 +118,88 @@ export default function PromptForm({ catalog, schema, onSaved, onCancel }: Props
             />
           </div>
 
-          {/* Template */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Template <span className="text-databricks-red">*</span>
-            </label>
-            <textarea
-              placeholder={`Write your prompt here. Use {{variable_name}} for dynamic values.\n\nExample:\nYou are a helpful assistant. Answer the following question:\n\n{{question}}`}
-              value={template}
-              onChange={(e) => setTemplate(e.target.value)}
-              rows={12}
-              className="w-full text-sm font-mono border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-databricks-red focus:border-transparent resize-none"
-            />
-            <p className="mt-1 text-xs text-gray-400">
+          {/* Template section */}
+          <div className="space-y-4">
+            {/* Mode toggle */}
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-700">
+                Template <span className="text-databricks-red">*</span>
+              </label>
+              <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
+                <button
+                  onClick={() => switchMode('chat')}
+                  className={`px-3 py-1.5 font-medium transition-colors ${
+                    inputMode === 'chat'
+                      ? 'bg-gray-100 text-gray-800'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Chat
+                </button>
+                <button
+                  onClick={() => switchMode('raw')}
+                  className={`px-3 py-1.5 font-medium transition-colors border-l border-gray-200 ${
+                    inputMode === 'raw'
+                      ? 'bg-gray-100 text-gray-800'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Raw
+                </button>
+              </div>
+            </div>
+
+            {inputMode === 'chat' ? (
+              <>
+                {/* System Prompt */}
+                <div>
+                  <label className="block text-xs font-medium text-indigo-600 mb-1.5 uppercase tracking-wide">
+                    System{' '}
+                    <span className="font-normal text-gray-400 normal-case tracking-normal">
+                      (optional)
+                    </span>
+                  </label>
+                  <textarea
+                    placeholder={`Define the model's persona or standing instructions.\n\nExample:\nYou are a concise, helpful assistant. Always respond in {{language}}.`}
+                    value={systemPrompt}
+                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    rows={5}
+                    className="w-full text-sm font-mono border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent resize-none bg-indigo-50/40"
+                  />
+                </div>
+
+                {/* User Template */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+                    User <span className="text-databricks-red">*</span>
+                  </label>
+                  <textarea
+                    placeholder={`The user-facing message with dynamic variables.\n\nExample:\nAnswer the following question clearly:\n\n{{question}}`}
+                    value={userTemplate}
+                    onChange={(e) => setUserTemplate(e.target.value)}
+                    rows={7}
+                    className="w-full text-sm font-mono border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-databricks-red focus:border-transparent resize-none"
+                  />
+                </div>
+              </>
+            ) : (
+              <div>
+                <textarea
+                  placeholder={`Enter a plain prompt or use XML tags for roles:\n\n<system>\nYou are a helpful assistant.\n</system>\n\n<user>\nAnswer this: {{question}}\n</user>`}
+                  value={rawTemplate}
+                  onChange={(e) => setRawTemplate(e.target.value)}
+                  rows={14}
+                  className="w-full text-sm font-mono border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-databricks-red focus:border-transparent resize-none bg-gray-50"
+                />
+              </div>
+            )}
+
+            <p className="text-xs text-gray-400">
               Use{' '}
               <span className="font-mono bg-gray-100 px-1 rounded text-gray-600">
                 {'{{variable_name}}'}
               </span>{' '}
-              to define template variables that get filled in at run time.
+              in any field to define template variables filled in at run time.
             </p>
           </div>
 

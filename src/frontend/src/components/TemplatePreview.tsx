@@ -10,8 +10,9 @@ export default function TemplatePreview({ template }: { template: PromptTemplate
   const [expanded, setExpanded] = useState(false);
   const [rawMode, setRawMode] = useState(false);
 
-  const hasPromptTags = /<(?:system|user)>/.test(template.template);
-  const normalizedTemplate = template.template.replace(/\\n/g, '\n');
+  const src = template.raw_template ?? template.template;
+  const hasPromptTags = /<(?:system|user)>/.test(src);
+  const normalizedTemplate = src.replace(/\\n/g, '\n');
   const displayText = rawMode || !hasPromptTags ? normalizedTemplate : stripPromptTags(normalizedTemplate);
 
   const highlighted = displayText.replace(

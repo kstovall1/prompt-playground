@@ -403,7 +403,7 @@ export default function App() {
           {/* Right Panel - Preview & Response */}
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Preview (top) */}
-            <div className={`${editor.isEditing ? 'h-3/5' : 'h-2/5'} min-h-[200px] border-b border-gray-200 overflow-hidden`}>
+            <div className="h-3/5 min-h-[200px] border-b border-gray-200 overflow-hidden">
               <PromptPreview
                 template={editor.activeTemplate}
                 variables={editor.activeVariables}
@@ -414,7 +414,7 @@ export default function App() {
                 draftTemplate={editor.draftTemplate}
                 onDraftChange={editor.setDraftTemplate}
                 onDraftVariablesChange={editor.setDraftVariables}
-                onSave={editor.save}
+                onSave={async (desc) => { await editor.save(desc); reset(); }}
                 saveLoading={saveLoading || createLoading}
                 saveError={saveError || createError}
                 isDirty={editor.isDirty}
@@ -438,6 +438,8 @@ export default function App() {
             await refreshPrompts();
             setSelectedPrompt(name);
             setSelectedVersion(version);
+            setVariableValues({});
+            editor.exitEdit();
           }}
           onCancel={() => setShowCreatePrompt(false)}
         />

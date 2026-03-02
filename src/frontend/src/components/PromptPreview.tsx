@@ -1,6 +1,8 @@
 import { Eye, Pencil, Save } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import { parseTemplateVariables } from '../utils/templateUtils';
+import { parseTemplateVariables, parseSystemUser, buildXmlTemplate } from '../utils/templateUtils';
+
+type InputMode = 'chat' | 'raw';
 
 interface Props {
   template: string | null;
@@ -48,9 +50,37 @@ export default function PromptPreview({
 }: Props) {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDescription, setSaveDescription] = useState('');
+  const [inputMode, setInputMode] = useState<InputMode>('chat');
+  const [previewMode, setPreviewMode] = useState<InputMode>('raw');
+  const [localSystem, setLocalSystem] = useState('');
+  const [localUser, setLocalUser] = useState('');
   const debounceRef = useRef<number>();
 
-  // Debounce variable extraction as user types
+  // Determine if the preview source has a system prompt (for the Chat/Raw toggle)
+  const previewSrc = !isEditing ? (isDirty ? draftTemplate : (template || '')) : '';
+  const hasSystemPrompt = !!parseSystemUser(previewSrc).system;
+
+  // Auto-set preview mode when system prompt presence changes or edit mode exits
+  useEffect(() => {
+    if (!isEditing) {
+      setPreviewMode(hasSystemPrompt ? 'chat' : 'raw');
+    }
+  }, [hasSystemPrompt, isEditing]);
+
+  // When entering edit mode, initialize chat fields from draftTemplate and reset to chat mode.
+  // Intentionally only fires on isEditing transitions to avoid resetting on each keystroke.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (isEditing) {
+      const parsed = parseSystemUser(draftTemplate);
+      setLocalSystem(parsed.system ?? '');
+      setLocalUser(parsed.user);
+      setInputMode('chat');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing]);
+
+  // Debounce variable extraction as user types (draftTemplate is kept in sync in all modes)
   useEffect(() => {
     if (!isEditing) return;
     clearTimeout(debounceRef.current);
@@ -59,6 +89,30 @@ export default function PromptPreview({
     }, 300);
     return () => clearTimeout(debounceRef.current);
   }, [draftTemplate, isEditing, onDraftVariablesChange]);
+
+  const switchMode = (next: InputMode) => {
+    if (next === inputMode) return;
+    if (next === 'raw') {
+      // draftTemplate is already up-to-date (synced via onDraftChange from chat handlers)
+      setInputMode('raw');
+    } else {
+      // Parse current raw textarea back into chat fields
+      const parsed = parseSystemUser(draftTemplate);
+      setLocalSystem(parsed.system ?? '');
+      setLocalUser(parsed.user);
+      setInputMode('chat');
+    }
+  };
+
+  const handleSystemChange = (val: string) => {
+    setLocalSystem(val);
+    onDraftChange(buildXmlTemplate(val, localUser));
+  };
+
+  const handleUserChange = (val: string) => {
+    setLocalUser(val);
+    onDraftChange(buildXmlTemplate(localSystem, val));
+  };
 
   // Empty state — no template selected and not creating new
   if (!template && !isEditing) {
@@ -96,7 +150,7 @@ export default function PromptPreview({
           <Eye className="w-4 h-4 text-gray-500" />
         )}
         <h3 className="text-sm font-semibold text-gray-700">
-          {isEditing ? 'Edit Template' : 'Prompt Preview'}
+          {isEditing ? 'New Version' : 'Prompt Preview'}
         </h3>
         {isDirty && (
           <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
@@ -109,6 +163,31 @@ export default function PromptPreview({
           </span>
         )}
         <div className={`${!isEditing && activeVars.length > 0 ? '' : 'ml-auto'} flex items-center gap-2`}>
+          {!isEditing && template !== null && (
+            <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
+              <button
+                onClick={() => setPreviewMode('chat')}
+                disabled={!hasSystemPrompt}
+                className={`px-3 py-1.5 font-medium transition-colors ${
+                  previewMode === 'chat'
+                    ? 'bg-gray-100 text-gray-800'
+                    : 'text-gray-500 hover:text-gray-700'
+                } disabled:opacity-40 disabled:cursor-not-allowed`}
+              >
+                Chat
+              </button>
+              <button
+                onClick={() => setPreviewMode('raw')}
+                className={`px-3 py-1.5 font-medium transition-colors border-l border-gray-200 ${
+                  previewMode === 'raw'
+                    ? 'bg-gray-100 text-gray-800'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Raw
+              </button>
+            </div>
+          )}
           {(isEditing || isLatestVersion) && (
             <button
               onClick={onToggleEdit}
@@ -125,10 +204,11 @@ export default function PromptPreview({
               )}
             </button>
           )}
-          {isDirty && (
+          {isEditing && template !== null && (
             <button
               onClick={() => setShowSaveDialog(true)}
-              className="text-xs text-white bg-databricks-red hover:bg-red-700 px-2.5 py-1 rounded-md flex items-center gap-1 font-medium transition-colors"
+              disabled={!isDirty}
+              className="text-xs text-white bg-databricks-red hover:bg-red-700 px-2.5 py-1 rounded-md flex items-center gap-1 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Save className="w-3 h-3" /> Register Version
             </button>
@@ -138,29 +218,130 @@ export default function PromptPreview({
 
       {/* Edit mode */}
       {isEditing ? (
-        <div className="flex-1 p-4 overflow-hidden flex flex-col">
-          <textarea
-            className="flex-1 text-sm font-mono bg-gray-50 rounded-lg p-4 resize-none border border-gray-200 focus:ring-2 focus:ring-databricks-red focus:border-databricks-red focus:outline-none"
-            value={draftTemplate}
-            onChange={(e) => onDraftChange(e.target.value)}
-            placeholder="Enter your prompt template here. Use {{variable_name}} for variables."
-            spellCheck={false}
-          />
+        <div className="flex-1 p-4 overflow-hidden flex flex-col gap-3">
+          {/* Mode toggle */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-400">Input format</span>
+            <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
+              <button
+                onClick={() => switchMode('chat')}
+                className={`px-3 py-1.5 font-medium transition-colors ${
+                  inputMode === 'chat'
+                    ? 'bg-gray-100 text-gray-800'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Chat
+              </button>
+              <button
+                onClick={() => switchMode('raw')}
+                className={`px-3 py-1.5 font-medium transition-colors border-l border-gray-200 ${
+                  inputMode === 'raw'
+                    ? 'bg-gray-100 text-gray-800'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Raw
+              </button>
+            </div>
+          </div>
+
+          {inputMode === 'chat' ? (
+            <div className="flex flex-col gap-3 flex-1 min-h-0">
+              {/* System */}
+              <div className="flex flex-col" style={{ flex: '0 0 auto' }}>
+                <div className="text-[10px] font-semibold text-indigo-500 uppercase tracking-widest mb-1.5 px-1">
+                  System <span className="font-normal text-gray-400 normal-case tracking-normal">(optional)</span>
+                </div>
+                <textarea
+                  className="text-sm font-mono bg-indigo-50/60 rounded-lg p-3 resize-none border border-indigo-100 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 focus:outline-none"
+                  rows={3}
+                  value={localSystem}
+                  onChange={(e) => handleSystemChange(e.target.value)}
+                  placeholder="Define the model's persona or standing instructions. Use {{variable}} for variables."
+                  spellCheck={false}
+                />
+              </div>
+              {/* User */}
+              <div className="flex flex-col flex-1 min-h-0">
+                <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5 px-1">
+                  User
+                </div>
+                <textarea
+                  className="flex-1 w-full text-sm font-mono bg-gray-50 rounded-lg p-3 resize-none border border-gray-200 focus:ring-2 focus:ring-databricks-red focus:border-databricks-red focus:outline-none"
+                  value={localUser}
+                  onChange={(e) => handleUserChange(e.target.value)}
+                  placeholder="The user-facing message. Use {{variable_name}} for variables."
+                  spellCheck={false}
+                />
+              </div>
+            </div>
+          ) : (
+            <textarea
+              className="flex-1 text-sm font-mono bg-gray-50 rounded-lg p-4 resize-none border border-gray-200 focus:ring-2 focus:ring-databricks-red focus:border-databricks-red focus:outline-none"
+              value={draftTemplate}
+              onChange={(e) => onDraftChange(e.target.value)}
+              placeholder={`Enter your prompt template here. Use {{variable_name}} for variables.\n\nFor system/user separation use XML tags:\n\n<system>\nYou are a helpful assistant.\n</system>\n\n<user>\nAnswer this: {{question}}\n</user>`}
+              spellCheck={false}
+            />
+          )}
         </div>
       ) : (
         <div className="flex-1 p-4 overflow-auto">
-          <div
-            className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap font-mono bg-gray-50 rounded-lg p-4"
-            dangerouslySetInnerHTML={{
-              __html: renderPreview(
-                isDirty ? draftTemplate : (template || ''),
-                values
-              ).replace(
+          {(() => {
+            const src = isDirty ? draftTemplate : (template || '');
+            const highlight = (t: string) =>
+              renderPreview(t, values).replace(
                 /\{\{\s*(\w+)\s*\}\}/g,
                 '<span class="inline-block bg-amber-100 text-amber-800 rounded px-1 font-mono text-xs">{{$1}}</span>'
-              ),
-            }}
-          />
+              );
+            if (previewMode === 'raw') {
+              const rawHighlight = (t: string) => {
+                const rendered = renderPreview(t, values);
+                const escaped = rendered
+                  .replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;');
+                return escaped.replace(
+                  /\{\{\s*(\w+)\s*\}\}/g,
+                  '<span class="inline-block bg-amber-100 text-amber-800 rounded px-1 font-mono text-xs">{{$1}}</span>'
+                );
+              };
+              return (
+                <div
+                  className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap font-mono bg-gray-50 rounded-lg p-4"
+                  dangerouslySetInnerHTML={{ __html: rawHighlight(src) }}
+                />
+              );
+            }
+            const { system, user } = parseSystemUser(src);
+            if (system !== null) {
+              return (
+                <div className="space-y-3">
+                  <div className="rounded-lg bg-indigo-50 border border-indigo-100 p-3">
+                    <div className="text-[10px] font-semibold text-indigo-500 uppercase tracking-widest mb-1.5">System</div>
+                    <div
+                      className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap font-mono"
+                      dangerouslySetInnerHTML={{ __html: highlight(system) }}
+                    />
+                  </div>
+                  <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
+                    <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">User</div>
+                    <div
+                      className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap font-mono"
+                      dangerouslySetInnerHTML={{ __html: highlight(user) }}
+                    />
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div
+                className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap font-mono bg-gray-50 rounded-lg p-4"
+                dangerouslySetInnerHTML={{ __html: highlight(src) }}
+              />
+            );
+          })()}
         </div>
       )}
 

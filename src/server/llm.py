@@ -82,14 +82,25 @@ def list_serving_endpoints(filter_chat_only: bool = True) -> list[dict]:
     return endpoints
 
 
-async def call_model(endpoint_name: str, prompt: str, max_tokens: int = 4096, temperature: float = 1.0) -> dict:
+async def call_model(
+    endpoint_name: str,
+    prompt: str,
+    max_tokens: int = 4096,
+    temperature: float = 1.0,
+    system_prompt: str | None = None,
+) -> dict:
     """Call a Foundation Model endpoint with the rendered prompt."""
     host = get_workspace_host()
     token = get_oauth_token()
     url = f"{host}/serving-endpoints/{endpoint_name}/invocations"
 
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
     payload = {
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
         "max_tokens": max_tokens,
         "temperature": temperature,
     }

@@ -11,7 +11,7 @@ import logging
 import warnings
 import mlflow
 from server.mlflow_helpers import configure_mlflow, get_mlflow_client
-from server.templates import parse_template_variables
+from server.templates import parse_template_variables, _template_to_str, parse_system_user, _normalize_escapes
 
 logger = logging.getLogger(__name__)
 
@@ -87,11 +87,14 @@ def get_prompt_versions(name: str) -> list[dict]:
                 if hasattr(v, "aliases"):
                     aliases = list(v.aliases)
 
+                template_str = _template_to_str(v.template) if hasattr(v, "template") and v.template else ""
+                # Strip XML tags so the preview shows clean content, not raw <system>...</system> markup
+                _, preview_str = parse_system_user(template_str)
                 versions_out.append({
                     "version": str(v.version),
                     "description": getattr(v, "description", "") or "",
                     "aliases": aliases,
-                    "template_preview": (v.template[:120] + "...") if hasattr(v, "template") and v.template and len(v.template) > 120 else (v.template if hasattr(v, "template") else ""),
+                    "template_preview": (preview_str[:120] + "...") if len(preview_str) > 120 else preview_str,
                     "creation_timestamp": ts,
                 })
     except Exception as e:
@@ -116,10 +119,25 @@ def get_prompt_template(name: str, version: str) -> dict:
             warnings.simplefilter("ignore", FutureWarning)
             prompt = mlflow.genai.load_prompt(uri)
 
-        template = prompt.template
+        raw = prompt.template  # str | list[dict]
+        # Normalize literal \n escape sequences to actual newlines. Some tools/APIs store
+        # templates with backslash-n as two characters instead of an actual newline character.
+        if isinstance(raw, str):
+            raw = _normalize_escapes(raw)
+        system_prompt, user_template = parse_system_user(raw)
 
-        # Always parse from template to preserve the order variables appear in the text
-        variables = parse_template_variables(template)
+        # raw_template: the full string stored in the registry, for round-trip edit fidelity.
+        # Native list[dict] prompts are converted to XML convention so our editor can handle them.
+        if isinstance(raw, list):
+            if system_prompt:
+                raw_template = f"<system>\n{system_prompt}\n</system>\n\n<user>\n{user_template}\n</user>"
+            else:
+                raw_template = user_template
+        else:
+            raw_template = raw
+
+        # Parse variables from the full content so variables in the system prompt are detected too
+        variables = parse_template_variables(raw)
 
         tags = {}
         if hasattr(prompt, "tags") and prompt.tags:
@@ -134,7 +152,9 @@ def get_prompt_template(name: str, version: str) -> dict:
         return {
             "name": name,
             "version": str(prompt.version) if hasattr(prompt, "version") else version,
-            "template": template,
+            "template": user_template,
+            "system_prompt": system_prompt,
+            "raw_template": raw_template,
             "variables": variables,
             "tags": tags,
             "aliases": list(prompt.aliases) if hasattr(prompt, "aliases") and prompt.aliases else [],
@@ -152,6 +172,7 @@ def create_prompt(name: str, template: str, description: str = "") -> dict:
     Returns dict with {name, version, template, variables}.
     """
     client = get_mlflow_client()
+    template = _normalize_escapes(template)
 
     # create_prompt creates the entity (no template); then create the first version
     client.create_prompt(name=name, description=description)
@@ -176,6 +197,7 @@ def create_prompt_version(name: str, template: str, description: str = "") -> di
     Returns dict with {name, version, template, variables}.
     """
     client = get_mlflow_client()
+    template = _normalize_escapes(template)
 
     prompt_version = client.create_prompt_version(
         name=name,
