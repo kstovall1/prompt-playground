@@ -1,8 +1,6 @@
 # Prompt Playground
 
-Teams using Databricks for generative AI need a fast, accessible way to iterate on prompts and measure their quality. The [MLflow Prompt Registry](https://docs.databricks.com/aws/en/mlflow3/genai/prompt-version-mgmt/prompt-registry/) provides versioned storage, but there's no native UI for running prompts interactively or evaluating them against real datasets — every iteration requires writing Python notebooks, slowing experimentation and locking out non-engineers.
-
-Prompt Playground is an interactive, no-code Databricks App for designing, testing, and evaluating prompts stored in the MLflow Prompt Registry. It enables product owners, prompt engineers, and both technical and non-technical users to iterate on prompt templates, run them against live model serving endpoints, and evaluate quality at scale — without writing code.
+Prompt Playground is an interactive, no-code Databricks App for designing, testing, and evaluating prompts stored in the [MLflow Prompt Registry](https://docs.databricks.com/aws/en/mlflow3/genai/prompt-version-mgmt/prompt-registry/). It enables product owners, prompt engineers, and both technical and non-technical users to iterate on prompt templates, run them against live model serving endpoints, and evaluate quality at scale — no Python required.
 
 ## What you can do
 
