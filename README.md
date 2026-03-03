@@ -364,3 +364,10 @@ uv run --no-project --python 3.11 \
 
 **401 / auth errors during local dev**
 → Re-authenticate: `databricks auth login --host <workspace-url>`
+
+---
+
+## Support
+
+Databricks does not offer official support for Databricks Solutions and its repository.
+For any issue with this app, please open an issue on GitHub and the team will have a look on a best effort basis.
