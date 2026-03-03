@@ -1,30 +1,15 @@
 # Prompt Playground
 
-A Databricks App for browsing, running, and evaluating prompts from the [MLflow Prompt Registry](https://docs.databricks.com/aws/en/mlflow3/genai/prompt-version-mgmt/prompt-registry/) — no code required.
+Teams using Databricks for generative AI need a fast, accessible way to iterate on prompts and measure their quality. The [MLflow Prompt Registry](https://docs.databricks.com/aws/en/mlflow3/genai/prompt-version-mgmt/prompt-registry/) provides versioned storage, but there's no native UI for running prompts interactively or evaluating them against real datasets — every iteration requires writing Python notebooks, slowing experimentation and locking out non-engineers.
 
-**Prompts tab** — browse and manage your prompt registry
-- Browse all prompts in a Unity Catalog schema with searchable dropdowns and version card lists
-- Create new prompts and register new versions directly from the UI — no Python required
-- Edit templates in-app; saving automatically creates a new version
-- Filter the prompt list to prompts that have runs in a specific MLflow experiment
+Prompt Playground is an interactive, no-code Databricks App for designing, testing, and evaluating prompts stored in the MLflow Prompt Registry. It enables product owners, prompt engineers, and both technical and non-technical users to iterate on prompt templates, run them against live model serving endpoints, and evaluate quality at scale — without writing code.
 
-**Playground tab** — iterate interactively
-- Fill in `{{template_variables}}` and run against any model serving endpoint
-- Live rendered preview shows the filled prompt before you run
-- Every run is logged as an MLflow trace with a direct link to open in Databricks
-- Reset variables and run again without leaving the app
+## What you can do
 
-**Evaluate tab** — batch evaluation against real data
-- Run a prompt version against any Unity Catalog Delta table dataset — no code required
-- Auto-map dataset columns to prompt variables by name, or configure the mapping manually
-- Dataset preview shows each row with the rendered prompt filled in — click any row to expand and see the full rendered prompt before running
-- Score with built-in LLM-as-judge presets or register your own judges (free-form instructions or structured guidelines checklists)
-- Post-run summary banner: avg score, copyable run ID, and a direct link to open results in MLflow
-- Results table with click-to-sort scores, per-row rendered prompt + full response + judge reasoning on expand
-- Low-scoring rows highlighted automatically for fast triage
-- "Open in Databricks" button in the tab bar links directly to the MLflow experiment — persists across all tabs once an experiment is selected
-
-The React frontend is pre-built and included. **No Node.js required to deploy.**
+- **Manage prompts** — browse, create, and version prompt templates directly from the UI; no code required
+- **Iterate interactively** — fill in `{{template_variables}}`, run against any model serving endpoint, and preview the fully rendered prompt before executing
+- **Evaluate at scale** — run a prompt version against any Unity Catalog Delta table, auto-map dataset columns to template variables, score with built-in LLM-as-judge presets or your own custom judges, and triage low-scoring results in-app
+- **Tightly integrated with Databricks** — every run and evaluation is logged as an MLflow trace with direct links to the Experiments UI, including prompt versions, model calls, scores, and judge reasoning; all data stays in your Unity Catalog environment
 
 ---
 
