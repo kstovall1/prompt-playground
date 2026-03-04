@@ -239,9 +239,11 @@ export default function HowToTab() {
           <div className="space-y-4">
             <Step num={1} icon={GitBranch} title="Browse Your Prompt Registry">
               Your prompt registry location is configured in <strong>Settings</strong> (gear icon in the header).
-              The app loads all prompts from that catalog and schema automatically. Use the{' '}
-              <strong>Experiment</strong> selector in the header to filter the prompt list to only prompts
-              that have been run in a specific MLflow experiment — a count badge shows how many match.
+              The app loads all prompts from that catalog and schema automatically. The{' '}
+              <strong>Experiment</strong> selector in the header controls which MLflow experiment runs are
+              logged to. Check <strong>Filter prompts to experiment</strong> (next to the selector) to show
+              only prompts that have been run in that experiment — the count updates automatically. This
+              filter applies across both the Prompts and Evaluate tabs.
             </Step>
             <Step num={2} icon={Tag} title="Browse Prompts and Versions">
               Select a prompt from the searchable dropdown and click a version to select it. Each version

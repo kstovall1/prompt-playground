@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { PromptInfo, PromptVersion, PromptTemplate, CreatePromptResponse, SaveVersionResponse } from '../types';
 import { apiFetch, useMutation } from './useApi';
 
@@ -35,8 +35,11 @@ export function usePromptVersions(name: string | null) {
   const [versions, setVersions] = useState<PromptVersion[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Tracks the most recent request so stale responses from a previous prompt are ignored
+  const requestIdRef = useRef(0);
 
   const fetchVersions = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setVersions([]);
     if (!name) return;
     setLoading(true);
@@ -46,11 +49,11 @@ export function usePromptVersions(name: string | null) {
       const data = await apiFetch<{ versions: PromptVersion[] }>(
         `/prompts/versions?${params.toString()}`
       );
-      setVersions(data.versions);
+      if (requestId === requestIdRef.current) setVersions(data.versions);
     } catch (e: any) {
-      setError(e.message);
+      if (requestId === requestIdRef.current) setError(e.message);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, [name]);
 

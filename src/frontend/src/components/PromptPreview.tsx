@@ -1,6 +1,5 @@
 import { Eye, Pencil, Save, Plus } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import ConfirmDialog from './ConfirmDialog';
 import { parseTemplateVariables, parseSystemUser, buildXmlTemplate } from '../utils/templateUtils';
 
 type InputMode = 'chat' | 'raw';
@@ -46,7 +45,6 @@ export default function PromptPreview({
   isDirty,
 }: Props) {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [saveDescription, setSaveDescription] = useState('');
   const [inputMode, setInputMode] = useState<InputMode>('chat');
   const [previewMode, setPreviewMode] = useState<InputMode>('raw');
@@ -205,7 +203,6 @@ export default function PromptPreview({
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => {
-                  if (isDirty) { setShowDiscardConfirm(true); return; }
                   onToggleEdit();
                 }}
                 className="text-xs text-gray-600 hover:text-gray-800 px-2.5 py-1 rounded-md font-medium transition-colors border border-gray-300 hover:bg-gray-50"
@@ -343,16 +340,6 @@ export default function PromptPreview({
         </div>
       )}
 
-      {showDiscardConfirm && (
-        <ConfirmDialog
-          title="Discard unsaved changes?"
-          message="Your edits to this version will be lost."
-          confirmLabel="Discard"
-          variant="warning"
-          onConfirm={() => { setShowDiscardConfirm(false); onToggleEdit(); }}
-          onCancel={() => setShowDiscardConfirm(false)}
-        />
-      )}
 
       {/* Save dialog */}
       {showSaveDialog && (

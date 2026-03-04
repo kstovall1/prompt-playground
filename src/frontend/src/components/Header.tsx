@@ -7,6 +7,11 @@ interface Props {
   experimentsLoading: boolean;
   onExperimentChange: (name: string) => void;
   onOpenSettings: () => void;
+  filterByExperiment: boolean;
+  onFilterChange: (v: boolean) => void;
+  experimentPromptsLoading: boolean;
+  filteredCount: number;
+  totalCount: number;
 }
 
 export default function Header({
@@ -15,6 +20,11 @@ export default function Header({
   experimentsLoading,
   onExperimentChange,
   onOpenSettings,
+  filterByExperiment,
+  onFilterChange,
+  experimentPromptsLoading,
+  filteredCount,
+  totalCount,
 }: Props) {
   return (
     <header className="bg-white border-b border-gray-200">
@@ -47,6 +57,23 @@ export default function Header({
                 />
               </div>
             </div>
+
+            <label className={`flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap${!experimentName ? ' invisible pointer-events-none' : ''}`}>
+              <input
+                type="checkbox"
+                checked={filterByExperiment}
+                onChange={(e) => onFilterChange(e.target.checked)}
+                className="w-3 h-3 rounded accent-databricks-red"
+              />
+              <span className="text-xs text-gray-500">
+                Filter prompts to experiment
+                {filterByExperiment && (
+                  experimentPromptsLoading
+                    ? <span className="text-gray-400"> (…)</span>
+                    : <span className="text-gray-400"> ({filteredCount}/{totalCount})</span>
+                )}
+              </span>
+            </label>
 
             <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
               Connected

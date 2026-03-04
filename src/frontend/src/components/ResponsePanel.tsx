@@ -1,4 +1,4 @@
-import { Bot, Loader2, AlertCircle, Zap, Copy, Check, ExternalLink } from 'lucide-react';
+import { Bot, Loader2, AlertCircle, Zap, Copy, Check } from 'lucide-react';
 import { useState } from 'react';
 import type { RunResponse } from '../types';
 
@@ -98,18 +98,6 @@ export default function ResponsePanel({ result, loading, error }: Props) {
               </span>
             )}
           </span>
-          {result.experiment_url && (
-            <a
-              href={result.experiment_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-2.5 py-1 border border-databricks-red/40 text-databricks-red text-xs font-medium rounded-lg hover:bg-red-50 transition-colors"
-              title={result.run_id ? `Run ID: ${result.run_id}` : undefined}
-            >
-              <ExternalLink className="w-3 h-3" />
-              Open in Databricks
-            </a>
-          )}
         </div>
       )}
     </div>

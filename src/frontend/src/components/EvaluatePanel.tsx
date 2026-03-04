@@ -113,7 +113,7 @@ export default function EvaluatePanel({
   const { tables, loading: tablesLoading, error: tablesError } = useEvalTables(evalCatalog, evalSchema);
   const { columns } = useEvalColumns(evalCatalog, evalSchema, selectedTable);
   const { columns: previewCols, rows: previewRows, totalRows, loading: previewLoading } = useTablePreview(evalCatalog, evalSchema, selectedTable);
-  const { result, loading, error, runEval, reset } = useRunEval();
+  const { result, loading, error, runEval, abort, reset } = useRunEval();
 
   // Bubble experiment URL up to App when eval completes
   useEffect(() => {
@@ -219,7 +219,7 @@ export default function EvaluatePanel({
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Prompt</label>
           <SearchableSelect
             value={selectedPrompt || ''}
-            onChange={(val) => { onSelectPrompt(val || null); onSelectVersion(null); setColumnMapping({}); }}
+            onChange={(val) => { onSelectPrompt(val || null); onSelectVersion(null); setColumnMapping({}); reset(); }}
             placeholder="Select a prompt..."
             options={prompts.map((p) => ({ value: p.name, label: p.name.split('.').pop() ?? p.name }))}
           />
@@ -243,7 +243,7 @@ export default function EvaluatePanel({
             </div>
             <SearchableSelect
               value={selectedVersion || ''}
-              onChange={(val) => { onSelectVersion(val || null); setColumnMapping({}); }}
+              onChange={(val) => { onSelectVersion(val || null); setColumnMapping({}); reset(); }}
               placeholder="Select a version..."
               options={versions.map((v) => ({
                 value: v.version,
@@ -291,7 +291,7 @@ export default function EvaluatePanel({
           ) : (
             <SearchableSelect
               value={selectedTable || ''}
-              onChange={(val) => { setSelectedTable(val || null); setColumnMapping({}); }}
+              onChange={(val) => { setSelectedTable(val || null); setColumnMapping({}); reset(); }}
               placeholder="Select a table..."
               options={tables.map((t) => ({ value: t, label: t }))}
             />
@@ -509,17 +509,22 @@ export default function EvaluatePanel({
       {/* ── Sticky Run Footer ──────────────────────────── */}
       <div className="flex-shrink-0 p-4 border-t border-gray-200 bg-white space-y-2">
         <div className="flex gap-2">
-          <button
-            onClick={handleRun}
-            disabled={!canRun || loading}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-databricks-red text-white text-sm font-medium rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-red-700 transition-colors"
-          >
-            {loading ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Running evaluation...</>
-            ) : (
-              <><FlaskConical className="w-4 h-4" /> Run Evaluation</>
-            )}
-          </button>
+          {loading ? (
+            <button
+              onClick={abort}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border border-databricks-red text-databricks-red text-sm font-medium rounded-lg hover:bg-red-50 transition-colors"
+            >
+              <X className="w-4 h-4" /> Stop
+            </button>
+          ) : (
+            <button
+              onClick={handleRun}
+              disabled={!canRun}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-databricks-red text-white text-sm font-medium rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-red-700 transition-colors"
+            >
+              <FlaskConical className="w-4 h-4" /> Run Evaluation
+            </button>
+          )}
           <button
             onClick={handleReset}
             className="px-3 py-2.5 border border-gray-200 rounded-lg text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"

@@ -98,10 +98,14 @@ export default function App() {
     refresh: refreshModels,
   } = useModels();
   const { experiments, loading: experimentsLoading } = useExperiments();
-  const { promptNames: experimentPromptNames, loading: experimentPromptsLoading } = useExperimentPrompts(experimentName);
+  const { promptNames: experimentPromptNames, loading: experimentPromptsLoading, refresh: refreshExperimentPrompts } = useExperimentPrompts(experimentName);
   const filteredPrompts = (filterByExperiment && experimentPromptNames)
     ? prompts.filter((p) => experimentPromptNames.includes(p.name))
     : prompts;
+  // Don't show the selected prompt in the browser if it's been filtered out by the experiment toggle
+  const promptsTabSelectedPrompt = (filterByExperiment && selectedPrompt && experimentPromptNames)
+    ? (filteredPrompts.some((p) => p.name === selectedPrompt) ? selectedPrompt : null)
+    : selectedPrompt;
   const { result, loading: runLoading, error: runError, run, reset } = useRunPrompt();
   const [experimentUrl, setExperimentUrl] = useState<string | undefined>(undefined);
 
@@ -229,6 +233,11 @@ export default function App() {
         experimentsLoading={experimentsLoading}
         onExperimentChange={handleExperimentChange}
         onOpenSettings={() => setShowSettings(true)}
+        filterByExperiment={filterByExperiment}
+        onFilterChange={setFilterByExperiment}
+        experimentPromptsLoading={experimentPromptsLoading}
+        filteredCount={filteredPrompts.length}
+        totalCount={prompts.length}
       />
 
       <TabBar activeTab={activeTab} onTabChange={handleTabChange} experimentUrl={experimentUrl} />
@@ -303,43 +312,19 @@ export default function App() {
               </div>
             )}
 
-            {/* Experiment filter toggle — only shown when an experiment is selected */}
-            {experimentName && (
-              <div className="flex-shrink-0 px-4 py-3 border-b border-gray-100">
-                <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={filterByExperiment}
-                    onChange={(e) => setFilterByExperiment(e.target.checked)}
-                    className="w-3 h-3 rounded accent-databricks-red"
-                  />
-                  <span className="text-xs text-gray-500">
-                    Filter prompts to experiment
-                    {filterByExperiment && (
-                      experimentPromptsLoading
-                        ? <span className="text-gray-400"> (loading…)</span>
-                        : experimentPromptNames
-                          ? <span className="text-gray-400"> ({filteredPrompts.length} of {prompts.length})</span>
-                          : <span className="text-gray-400"> (no runs yet)</span>
-                    )}
-                  </span>
-                </label>
-              </div>
-            )}
-
             {/* Flexible middle — PromptSelector grows to fill */}
             <div className="flex-1 overflow-hidden p-4">
               <PromptSelector
                 prompts={filteredPrompts}
                 promptsLoading={promptsLoading}
                 promptsError={promptsError}
-                selectedPrompt={selectedPrompt}
+                selectedPrompt={promptsTabSelectedPrompt}
                 onSelectPrompt={handleSelectPrompt}
                 versions={versions}
                 versionsLoading={versionsLoading}
                 selectedVersion={selectedVersion}
                 onSelectVersion={handleSelectVersion}
-                onRefresh={refreshPrompts}
+                onRefresh={() => { refreshPrompts(); refreshExperimentPrompts(); }}
                 onCreateNew={() => setShowCreatePrompt(true)}
                 onNewVersion={selectedVersion ? editor.toggleEdit : undefined}
               />
@@ -394,7 +379,7 @@ export default function App() {
                         {selectedPrompt.split('.').pop()}
                       </span>
                       <button
-                        onClick={() => setActiveTab('prompts')}
+                        onClick={() => handleTabChange('prompts')}
                         className="text-xs text-databricks-red hover:underline"
                       >
                         Change →

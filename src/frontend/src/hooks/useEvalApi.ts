@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ExperimentInfo, JudgeInfo, EvalResponse } from '../types';
 import { apiFetch, useMutation } from './useApi';
 
@@ -29,7 +29,7 @@ export function useExperimentPrompts(experimentName: string) {
   const [promptNames, setPromptNames] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     setPromptNames(null);
     if (!experimentName) return;
     setLoading(true);
@@ -40,7 +40,11 @@ export function useExperimentPrompts(experimentName: string) {
       .finally(() => setLoading(false));
   }, [experimentName]);
 
-  return { promptNames, loading };
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { promptNames, loading, refresh };
 }
 
 export function useJudges(experimentName: string) {
@@ -179,37 +183,60 @@ export function useTablePreview(catalog: string, schema: string, table: string |
 
 export function useRunEval() {
   const [result, setResult] = useState<EvalResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const { mutate, loading, error } = useMutation(
-    async (params: {
-      prompt_name: string;
-      prompt_version: string;
-      model_name: string;
-      dataset_catalog: string;
-      dataset_schema: string;
-      dataset_table: string;
-      column_mapping: Record<string, string>;
-      max_rows?: number;
-      temperature?: number;
-      experiment_name?: string;
-      scorer_name?: string;
-      judge_model?: string;
-      judge_temperature?: number;
-      expectations_column?: string;
-    }) => {
-      setResult(null);
-      const data = await apiFetch<EvalResponse>('/eval/run', {
+  const runEval = useCallback(async (params: {
+    prompt_name: string;
+    prompt_version: string;
+    model_name: string;
+    dataset_catalog: string;
+    dataset_schema: string;
+    dataset_table: string;
+    column_mapping: Record<string, string>;
+    max_rows?: number;
+    temperature?: number;
+    experiment_name?: string;
+    scorer_name?: string;
+    judge_model?: string;
+    judge_temperature?: number;
+    expectations_column?: string;
+  }) => {
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch('/api/eval/run', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params),
+        signal: abortRef.current.signal,
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(body.detail || `API error: ${res.status}`);
+      }
+      const data: EvalResponse = await res.json();
       setResult(data);
-      return data;
+    } catch (e: any) {
+      if (e.name !== 'AbortError') setError(e.message);
+    } finally {
+      setLoading(false);
+      abortRef.current = null;
     }
-  );
+  }, []);
+
+  const abort = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   const reset = useCallback(() => {
     setResult(null);
+    setError(null);
   }, []);
 
-  return { result, loading, error, runEval: mutate, reset };
+  return { result, loading, error, runEval, abort, reset };
 }
