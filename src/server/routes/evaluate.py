@@ -11,10 +11,22 @@ from server.mlflow_helpers import configure_mlflow, get_experiment_id, experimen
 from server.llm import call_model
 from server.warehouse import list_eval_tables, get_table_columns, read_table_rows, count_table_rows
 from server.evaluation import mlflow_genai_evaluate
+from server.settings import get_effective_config
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/eval", tags=["evaluate"])
+
+
+def _get_warehouse_id() -> str:
+    """Resolve the effective SQL warehouse ID from persisted settings or env var."""
+    wid = get_effective_config().get("sql_warehouse_id", "")
+    if not wid:
+        raise HTTPException(
+            status_code=400,
+            detail="SQL warehouse not configured. Open Settings (gear icon) to select a warehouse.",
+        )
+    return wid
 
 
 # --- Discovery routes ---
@@ -29,7 +41,7 @@ async def api_list_experiments(catalog: str | None = None, schema: str | None = 
     """
     try:
         client = get_mlflow_client()
-        experiments = client.search_experiments()
+        experiments = await asyncio.to_thread(client.search_experiments)
         active = [e for e in experiments if e.lifecycle_stage == "active"]
 
         if not catalog or not schema:
@@ -97,8 +109,11 @@ async def api_get_experiment_prompts(experiment_name: str):
 async def api_list_eval_tables(catalog: str = "main", schema: str = "eval_data"):
     """List tables available as eval datasets."""
     try:
-        tables = await asyncio.to_thread(list_eval_tables, catalog, schema)
+        warehouse_id = _get_warehouse_id()
+        tables = await asyncio.to_thread(list_eval_tables, catalog, schema, warehouse_id)
         return {"tables": tables}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -236,8 +251,11 @@ async def api_delete_judge(name: str, experiment_name: str | None = None):  # no
 async def api_get_columns(catalog: str, schema: str, table: str):
     """Get column names for a table so the user can map them to prompt variables."""
     try:
-        cols = await asyncio.to_thread(get_table_columns, catalog, schema, table)
+        warehouse_id = _get_warehouse_id()
+        cols = await asyncio.to_thread(get_table_columns, catalog, schema, table, warehouse_id)
         return {"columns": cols}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -246,12 +264,15 @@ async def api_get_columns(catalog: str, schema: str, table: str):
 async def api_table_preview(catalog: str, schema: str, table: str, limit: int = 20):
     """Return column names, a sample of rows, and total row count for the dataset preview UI."""
     try:
+        warehouse_id = _get_warehouse_id()
         cols, rows, total_rows = await asyncio.gather(
-            asyncio.to_thread(get_table_columns, catalog, schema, table),
-            asyncio.to_thread(read_table_rows, catalog, schema, table, limit=limit),
-            asyncio.to_thread(count_table_rows, catalog, schema, table),
+            asyncio.to_thread(get_table_columns, catalog, schema, table, warehouse_id),
+            asyncio.to_thread(read_table_rows, catalog, schema, table, warehouse_id, limit=limit),
+            asyncio.to_thread(count_table_rows, catalog, schema, table, warehouse_id),
         )
         return {"columns": cols, "rows": rows, "total_rows": total_rows}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -318,13 +339,17 @@ async def api_run_evaluation(request: EvalRequest):
 
     # Read dataset rows
     try:
+        warehouse_id = _get_warehouse_id()
         rows = await asyncio.to_thread(
             read_table_rows,
             request.dataset_catalog,
             request.dataset_schema,
             request.dataset_table,
+            warehouse_id,
             limit=request.max_rows,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading dataset: {e}")
 
@@ -412,7 +437,7 @@ async def api_run_evaluation(request: EvalRequest):
         if run_id:
             exp_id = get_experiment_id(request.experiment_name)
             if exp_id:
-                exp_url = experiment_url(exp_id)
+                exp_url = make_experiment_url(exp_id)
     except Exception as e:
         logger.warning("MLflow eval failed (non-fatal): %s", e)
 

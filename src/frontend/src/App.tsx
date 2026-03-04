@@ -12,7 +12,8 @@ import ResponsePanel from './components/ResponsePanel';
 import EvaluatePanel from './components/EvaluatePanel';
 import HowToTab from './components/HowToTab';
 import PromptForm from './components/PromptForm';
-import { Loader2 } from 'lucide-react';
+import SettingsModal from './components/SettingsModal';
+import SearchableSelect from './components/SearchableSelect';
 import {
   useConfig,
   usePrompts,
@@ -30,10 +31,13 @@ import { usePromptEditor } from './hooks/usePromptEditor';
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('prompts');
   const [pendingTab, setPendingTab] = useState<Tab | null>(null);
+  const [pendingPromptChange, setPendingPromptChange] = useState<{ name: string | null } | null>(null);
+  const [pendingVersionChange, setPendingVersionChange] = useState<{ version: string | null } | null>(null);
   const [showCreatePrompt, setShowCreatePrompt] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Load catalog/schema config from backend (set via app.yaml env vars)
-  const { config, loading: configLoading } = useConfig();
+  const { config, loading: configLoading, refresh: refreshConfig, isConfigured } = useConfig();
 
   // Catalog / schema state — initialized from config once loaded
   const [catalog, setCatalog] = useState('');
@@ -53,6 +57,13 @@ export default function App() {
       setExperimentName(config.mlflow_experiment_name);
     }
   }, [config]);
+
+  // Auto-open settings on first load if app is unconfigured
+  useEffect(() => {
+    if (!configLoading && !isConfigured) {
+      setShowSettings(true);
+    }
+  }, [configLoading, isConfigured]);
 
   // Use '' as fallback (not 'main') so usePrompts won't fire until config is loaded
   const activeCatalog = catalog || config?.prompt_catalog || '';
@@ -75,7 +86,7 @@ export default function App() {
     error: promptsError,
     refresh: refreshPrompts,
   } = usePrompts(activeCatalog, activeSchema);
-  const { versions, loading: versionsLoading, refresh: refreshVersions } = usePromptVersions(selectedPrompt);
+  const { versions, loading: versionsLoading, refresh: refreshVersions, reset: resetVersions } = usePromptVersions(selectedPrompt);
   const { template, loading: templateLoading } = usePromptTemplate(
     selectedPrompt,
     selectedVersion
@@ -87,7 +98,7 @@ export default function App() {
     refresh: refreshModels,
   } = useModels();
   const { experiments, loading: experimentsLoading } = useExperiments();
-  const { promptNames: experimentPromptNames } = useExperimentPrompts(experimentName);
+  const { promptNames: experimentPromptNames, loading: experimentPromptsLoading } = useExperimentPrompts(experimentName);
   const filteredPrompts = (filterByExperiment && experimentPromptNames)
     ? prompts.filter((p) => experimentPromptNames.includes(p.name))
     : prompts;
@@ -105,6 +116,13 @@ export default function App() {
   useEffect(() => {
     if (result?.experiment_url) setExperimentUrl(result.experiment_url);
   }, [result?.experiment_url]);
+  // Auto-select latest version when versions load and none is selected
+  useEffect(() => {
+    if (versions.length > 0 && !selectedVersion) {
+      setSelectedVersion(versions[0].version);
+    }
+  }, [versions, selectedVersion]);
+
   const { save: saveVersion, loading: saveLoading, error: saveError } = useSaveVersion();
   const { create: createPrompt, loading: createLoading, error: createError } = useCreatePrompt();
 
@@ -122,33 +140,20 @@ export default function App() {
     setVariableValues,
   });
 
-  // Handle catalog/schema change - clear prompt selection
-  const handleCatalogChange = useCallback((val: string) => {
-    setCatalog(val);
-    setSelectedPrompt(null);
-    setSelectedVersion(null);
-    setVariableValues({});
-  }, []);
-
-  const handleSchemaChange = useCallback((val: string) => {
-    setSchema(val);
-    setSelectedPrompt(null);
-    setSelectedVersion(null);
-    setVariableValues({});
-  }, []);
-
   const handleExperimentChange = useCallback((name: string) => {
     setExperimentName(name);
     setFilterByExperiment(true);
   }, []);
 
-  // Handle prompt selection - clear variables and exit edit mode
+  // Handle prompt selection - clear variables, versions, and exit edit mode
   const handleSelectPrompt = useCallback((name: string | null) => {
+    if (editor.isDirty) { setPendingPromptChange({ name }); return; }
+    resetVersions();
     setSelectedPrompt(name);
     setSelectedVersion(null);
     setVariableValues({});
     editor.exitEdit();
-  }, [editor.exitEdit]);
+  }, [editor.isDirty, editor.exitEdit, resetVersions]);
 
   const handleTabChange = useCallback((tab: Tab) => {
     if (editor.isDirty) {
@@ -161,9 +166,10 @@ export default function App() {
 
   // Handle version selection - keep variable values if same variables exist
   const handleSelectVersion = useCallback((version: string | null) => {
+    if (editor.isDirty) { setPendingVersionChange({ version }); return; }
     setSelectedVersion(version);
     editor.exitEdit();
-  }, [editor.exitEdit]);
+  }, [editor.isDirty, editor.exitEdit]);
 
   // Handle variable value change
   const handleVariableChange = useCallback((key: string, value: string) => {
@@ -215,14 +221,6 @@ export default function App() {
 
   const unfilledVars = editor.activeVariables.filter(v => !variableValues[v]?.trim());
 
-  if (configLoading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="w-8 h-8 animate-spin text-databricks-red" />
-      </div>
-    );
-  }
-
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       <Header
@@ -230,6 +228,7 @@ export default function App() {
         experiments={experiments}
         experimentsLoading={experimentsLoading}
         onExperimentChange={handleExperimentChange}
+        onOpenSettings={() => setShowSettings(true)}
       />
 
       <TabBar activeTab={activeTab} onTabChange={handleTabChange} experimentUrl={experimentUrl} />
@@ -256,6 +255,8 @@ export default function App() {
             experimentName={experimentName}
             onNewVersion={selectedVersion ? () => { editor.toggleEdit(); setActiveTab('prompts'); } : undefined}
             onExperimentUrl={setExperimentUrl}
+            onOpenSettings={() => setShowSettings(true)}
+            hasWarehouse={!!config?.sql_warehouse_id}
           />
         </div>
 
@@ -263,33 +264,49 @@ export default function App() {
         <div className={`h-full flex ${activeTab !== 'prompts' ? 'hidden' : ''}`}>
           {/* Left Panel - Prompt browser */}
           <div className="w-1/3 min-w-[280px] flex-shrink-0 border-r border-gray-200 bg-white flex flex-col overflow-hidden">
-            {/* Fixed top — registry */}
-            <div className="flex-shrink-0 p-4 border-b border-gray-100">
-              {/* Prompt Registry catalog/schema */}
-              <div>
-                <label className="section-label">Prompt Registry</label>
-                <div className="flex items-center gap-1">
-                  <input
-                    type="text"
-                    className="text-sm border border-gray-200 rounded-md px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-databricks-red focus:border-transparent"
-                    placeholder="catalog"
-                    value={activeCatalog}
-                    onChange={(e) => handleCatalogChange(e.target.value)}
-                  />
-                  <span className="text-gray-400 text-sm select-none">.</span>
-                  <input
-                    type="text"
-                    className="text-sm border border-gray-200 rounded-md px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-databricks-red focus:border-transparent"
-                    placeholder="schema"
-                    value={activeSchema}
-                    onChange={(e) => handleSchemaChange(e.target.value)}
-                  />
-                </div>
+            {/* Prompt Registry badge — click to open Settings */}
+            <div className="flex-shrink-0 px-4 py-2.5 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Prompt Registry</span>
+                {activeCatalog && (
+                  <button
+                    onClick={() => setShowSettings(true)}
+                    className="text-xs text-databricks-red hover:underline flex-shrink-0"
+                  >
+                    Edit →
+                  </button>
+                )}
               </div>
+              {activeCatalog ? (
+                <span className="text-xs font-mono text-gray-400 truncate block mt-0.5">
+                  {activeCatalog}<span className="text-gray-300">.</span>{activeSchema}
+                </span>
+              ) : (
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="text-xs text-databricks-red hover:underline mt-0.5 block"
+                >
+                  Configure prompt registry →
+                </button>
+              )}
+            </div>
 
-              {/* Experiment filter toggle — only shown when an experiment is selected */}
-              {experimentName && (
-                <label className="mt-3 flex items-center gap-1.5 cursor-pointer select-none">
+            {/* Warehouse warning — shown when catalog is set but warehouse is missing */}
+            {activeCatalog && !config?.sql_warehouse_id && (
+              <div className="flex-shrink-0 px-4 py-2.5 border-b border-amber-100 bg-amber-50">
+                <p className="text-xs text-amber-700">
+                  SQL warehouse not configured.{' '}
+                  <button onClick={() => setShowSettings(true)} className="underline font-medium">
+                    Open Settings →
+                  </button>
+                </p>
+              </div>
+            )}
+
+            {/* Experiment filter toggle — only shown when an experiment is selected */}
+            {experimentName && (
+              <div className="flex-shrink-0 px-4 py-3 border-b border-gray-100">
+                <label className="flex items-center gap-1.5 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={filterByExperiment}
@@ -297,14 +314,18 @@ export default function App() {
                     className="w-3 h-3 rounded accent-databricks-red"
                   />
                   <span className="text-xs text-gray-500">
-                    Filter to experiment
-                    {filterByExperiment && experimentPromptNames && (
-                      <span className="text-gray-400"> ({filteredPrompts.length} of {prompts.length})</span>
+                    Filter prompts to experiment
+                    {filterByExperiment && (
+                      experimentPromptsLoading
+                        ? <span className="text-gray-400"> (loading…)</span>
+                        : experimentPromptNames
+                          ? <span className="text-gray-400"> ({filteredPrompts.length} of {prompts.length})</span>
+                          : <span className="text-gray-400"> (no runs yet)</span>
                     )}
                   </span>
                 </label>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Flexible middle — PromptSelector grows to fill */}
             <div className="flex-1 overflow-hidden p-4">
@@ -366,20 +387,31 @@ export default function App() {
               {/* Loaded prompt indicator */}
               <div>
                 <label className="section-label">Prompt</label>
-                {selectedPrompt && selectedVersion ? (
-                  <div className="flex items-center justify-between">
-                    <div>
+                {selectedPrompt ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-gray-700">
                         {selectedPrompt.split('.').pop()}
                       </span>
-                      <span className="ml-2 text-xs text-gray-400">v{selectedVersion}</span>
+                      <button
+                        onClick={() => setActiveTab('prompts')}
+                        className="text-xs text-databricks-red hover:underline"
+                      >
+                        Change →
+                      </button>
                     </div>
-                    <button
-                      onClick={() => setActiveTab('prompts')}
-                      className="text-xs text-databricks-red hover:underline"
-                    >
-                      Change →
-                    </button>
+                    <SearchableSelect
+                      value={selectedVersion || ''}
+                      onChange={(val) => handleSelectVersion(val || null)}
+                      disabled={versionsLoading}
+                      loading={versionsLoading}
+                      allowClear={false}
+                      placeholder="Select version..."
+                      options={versions.map((v) => ({
+                        value: v.version,
+                        label: `v${v.version}${v.aliases?.length ? ` · ${v.aliases.join(', ')}` : ''}${v.description ? ` — ${v.description}` : ''}`,
+                      }))}
+                    />
                   </div>
                 ) : (
                   <button
@@ -461,12 +493,48 @@ export default function App() {
           title="Discard unsaved changes?"
           message="You have unsaved edits to this version. Leave without saving?"
           confirmLabel="Discard"
+          variant="warning"
           onConfirm={() => {
             editor.exitEdit();
             setActiveTab(pendingTab);
             setPendingTab(null);
           }}
           onCancel={() => setPendingTab(null)}
+        />
+      )}
+
+      {pendingVersionChange !== null && (
+        <ConfirmDialog
+          title="Discard unsaved changes?"
+          message="You have unsaved edits to this version. Switching versions will discard them."
+          confirmLabel="Discard"
+          variant="warning"
+          onConfirm={() => {
+            const { version } = pendingVersionChange;
+            setPendingVersionChange(null);
+            editor.exitEdit();
+            setSelectedVersion(version);
+          }}
+          onCancel={() => setPendingVersionChange(null)}
+        />
+      )}
+
+      {pendingPromptChange !== null && (
+        <ConfirmDialog
+          title="Discard unsaved changes?"
+          message="You have unsaved edits to this version. Switching prompts will discard them."
+          confirmLabel="Discard"
+          variant="warning"
+          onConfirm={() => {
+            const { name } = pendingPromptChange;
+            setPendingPromptChange(null);
+            editor.exitEdit();
+            resetVersions();
+            setSelectedPrompt(name);
+            setSelectedVersion(null);
+            setVariableValues({});
+          }}
+          onCancel={() => setPendingPromptChange(null)}
         />
       )}
 
@@ -483,6 +551,23 @@ export default function App() {
             editor.exitEdit();
           }}
           onCancel={() => setShowCreatePrompt(false)}
+        />
+      )}
+
+      {showSettings && config && (
+        <SettingsModal
+          config={config}
+          onSave={(updated) => {
+            refreshConfig();
+            setCatalog(updated.prompt_catalog);
+            setSchema(updated.prompt_schema);
+            setExperimentName(updated.mlflow_experiment_name);
+            setSelectedPrompt(null);
+            setSelectedVersion(null);
+            setVariableValues({});
+            setShowSettings(false);
+          }}
+          onClose={() => setShowSettings(false)}
         />
       )}
     </div>

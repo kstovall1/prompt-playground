@@ -7,3 +7,6 @@ src/frontend/tsconfig.tsbuildinfo
 .databricks/
 .DS_Store
 docs/
+pp_settings.json
+mlflow.db
+.claude/

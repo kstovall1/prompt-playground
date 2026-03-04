@@ -58,7 +58,9 @@ export function usePromptVersions(name: string | null) {
     fetchVersions();
   }, [fetchVersions]);
 
-  return { versions, loading, error, refresh: fetchVersions };
+  const reset = useCallback(() => setVersions([]), []);
+
+  return { versions, loading, error, refresh: fetchVersions, reset };
 }
 
 export function usePromptTemplate(name: string | null, version: string | null) {

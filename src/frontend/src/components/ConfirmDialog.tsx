@@ -1,10 +1,11 @@
-import { Loader2, Trash2 } from 'lucide-react';
+import { AlertTriangle, Loader2, Trash2 } from 'lucide-react';
 
 interface Props {
   title: string;
   message: string;
   confirmLabel?: string;
   loading?: boolean;
+  variant?: 'danger' | 'warning';
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -14,9 +15,12 @@ export default function ConfirmDialog({
   message,
   confirmLabel = 'Delete',
   loading = false,
+  variant = 'danger',
   onConfirm,
   onCancel,
 }: Props) {
+  const isWarning = variant === 'warning';
+
   return (
     <>
       {/* Backdrop */}
@@ -25,8 +29,11 @@ export default function ConfirmDialog({
       {/* Centered panel */}
       <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-white rounded-xl shadow-2xl p-6">
         {/* Icon */}
-        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-red-50 mb-4 mx-auto">
-          <Trash2 className="w-5 h-5 text-databricks-red" />
+        <div className={`flex items-center justify-center w-10 h-10 rounded-full mb-4 mx-auto ${isWarning ? 'bg-amber-50' : 'bg-red-50'}`}>
+          {isWarning
+            ? <AlertTriangle className="w-5 h-5 text-amber-500" />
+            : <Trash2 className="w-5 h-5 text-databricks-red" />
+          }
         </div>
 
         <h2 className="text-base font-semibold text-gray-900 text-center">{title}</h2>

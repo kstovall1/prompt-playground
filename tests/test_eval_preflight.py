@@ -55,13 +55,14 @@ _MODEL_RESULT = {"content": "response", "model": "m", "usage": {}}
 def _eval_patches(rows, extra_patches=()):
     """Context manager providing all patches needed for POST /api/eval/run without workspace calls."""
     patches = [
+        patch("server.routes.evaluate._get_warehouse_id", return_value="test-warehouse-id"),
         patch("server.routes.evaluate.get_prompt_template", return_value=_PROMPT_DATA),
         patch("server.routes.evaluate.read_table_rows", return_value=rows),
         patch("server.routes.evaluate.call_model", new=AsyncMock(return_value=_MODEL_RESULT)),
         patch("server.routes.evaluate.mlflow_genai_evaluate", return_value=("run-id", {0: (None, None, None)})),
         patch("server.routes.evaluate.configure_mlflow"),
         patch("server.routes.evaluate.get_experiment_id", return_value=None),
-        patch("server.routes.evaluate.experiment_url", return_value=None),
+        patch("server.routes.evaluate.make_experiment_url", return_value=None),
         *extra_patches,
     ]
     with ExitStack() as stack:
@@ -125,6 +126,7 @@ class TestEvalColumnPreflight:
         payload = {**_BASE_EVAL_PAYLOAD, "column_mapping": {"topic": "missing_col"}}
 
         with (
+            patch("server.routes.evaluate._get_warehouse_id", return_value="test-warehouse-id"),
             patch("server.routes.evaluate.get_prompt_template", return_value=_PROMPT_DATA),
             patch("server.routes.evaluate.read_table_rows", return_value=rows),
             patch("server.routes.evaluate.call_model", new=mock_call),
@@ -162,6 +164,7 @@ class TestEvalColumnPreflight:
         payload = {**_BASE_EVAL_PAYLOAD}
 
         with (
+            patch("server.routes.evaluate._get_warehouse_id", return_value="test-warehouse-id"),
             patch("server.routes.evaluate.get_prompt_template", return_value=_PROMPT_DATA),
             patch("server.routes.evaluate.read_table_rows", return_value=[]),
             patch("server.routes.evaluate.configure_mlflow"),
@@ -184,6 +187,7 @@ class TestTablePreviewEndpoint:
         rows = [{"col_a": "v1", "col_b": "v2"}, {"col_a": "v3", "col_b": "v4"}]
 
         with (
+            patch("server.routes.evaluate._get_warehouse_id", return_value="wh-id"),
             patch("server.routes.evaluate.get_table_columns", return_value=cols),
             patch("server.routes.evaluate.read_table_rows", return_value=rows),
             patch("server.routes.evaluate.count_table_rows", return_value=2),
@@ -200,30 +204,35 @@ class TestTablePreviewEndpoint:
         mock_rows = MagicMock(return_value=[])
 
         with (
+            patch("server.routes.evaluate._get_warehouse_id", return_value="wh-id"),
             patch("server.routes.evaluate.get_table_columns", return_value=[]),
             patch("server.routes.evaluate.read_table_rows", mock_rows),
             patch("server.routes.evaluate.count_table_rows", return_value=0),
         ):
             client.get("/api/eval/table-preview?catalog=main&schema=eval&table=t")
 
-        mock_rows.assert_called_once_with("main", "eval", "t", limit=20)
+        mock_rows.assert_called_once_with("main", "eval", "t", "wh-id", limit=20)
 
     def test_custom_limit_passed_through(self, client):
         mock_rows = MagicMock(return_value=[])
 
         with (
+            patch("server.routes.evaluate._get_warehouse_id", return_value="wh-id"),
             patch("server.routes.evaluate.get_table_columns", return_value=[]),
             patch("server.routes.evaluate.read_table_rows", mock_rows),
             patch("server.routes.evaluate.count_table_rows", return_value=0),
         ):
             client.get("/api/eval/table-preview?catalog=main&schema=eval&table=t&limit=5")
 
-        mock_rows.assert_called_once_with("main", "eval", "t", limit=5)
+        mock_rows.assert_called_once_with("main", "eval", "t", "wh-id", limit=5)
 
     def test_warehouse_error_returns_500(self, client):
-        with patch(
-            "server.routes.evaluate.get_table_columns",
-            side_effect=RuntimeError("Warehouse timeout"),
+        with (
+            patch("server.routes.evaluate._get_warehouse_id", return_value="wh-id"),
+            patch(
+                "server.routes.evaluate.get_table_columns",
+                side_effect=RuntimeError("Warehouse timeout"),
+            ),
         ):
             resp = client.get("/api/eval/table-preview?catalog=main&schema=eval&table=t")
 
@@ -235,6 +244,7 @@ class TestTablePreviewEndpoint:
 
     def test_empty_table_returns_empty_rows(self, client):
         with (
+            patch("server.routes.evaluate._get_warehouse_id", return_value="wh-id"),
             patch("server.routes.evaluate.get_table_columns", return_value=["col"]),
             patch("server.routes.evaluate.read_table_rows", return_value=[]),
             patch("server.routes.evaluate.count_table_rows", return_value=0),
@@ -251,6 +261,7 @@ class TestTablePreviewEndpoint:
         cols = ["z_col", "a_col", "m_col"]  # non-alphabetical order
 
         with (
+            patch("server.routes.evaluate._get_warehouse_id", return_value="wh-id"),
             patch("server.routes.evaluate.get_table_columns", return_value=cols),
             patch("server.routes.evaluate.read_table_rows", return_value=[]),
             patch("server.routes.evaluate.count_table_rows", return_value=0),

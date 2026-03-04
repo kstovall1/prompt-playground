@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Loader2 } from 'lucide-react';
 
 export interface SelectOption {
   value: string;
@@ -32,6 +32,10 @@ interface Props {
    * where value='' is never valid (e.g. experiment picker that's always set).
    */
   allowClear?: boolean;
+  /** Called when the dropdown opens — use for lazy-loading options */
+  onOpen?: () => void;
+  /** When true, shows a loading spinner inside the open dropdown */
+  loading?: boolean;
 }
 
 export default function SearchableSelect({
@@ -44,6 +48,8 @@ export default function SearchableSelect({
   className = '',
   leftIcon,
   allowClear = true,
+  onOpen,
+  loading = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -80,6 +86,7 @@ export default function SearchableSelect({
 
   const handleOpen = () => {
     if (disabled) return;
+    onOpen?.();
     setOpen(true);
     setQuery('');
     setTimeout(() => inputRef.current?.focus(), 10);
@@ -211,20 +218,28 @@ export default function SearchableSelect({
       {open && (
         <div className="absolute z-50 mt-1 w-full bg-white rounded-lg shadow-lg ring-1 ring-gray-200 overflow-hidden">
           <div className="max-h-52 overflow-y-auto">
-            {allowClear && (
-              <button
-                type="button"
-                onMouseDown={() => handleSelect('')}
-                className={`w-full text-left px-3 py-1.5 text-sm transition-colors hover:bg-red-50 hover:text-databricks-red ${
-                  !value
-                    ? 'text-databricks-red font-medium bg-red-50'
-                    : 'text-gray-400'
-                }`}
-              >
-                {placeholder}
-              </button>
+            {loading ? (
+              <div className="flex items-center gap-2 px-3 py-3 text-xs text-gray-400">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…
+              </div>
+            ) : (
+              <>
+                {allowClear && (
+                  <button
+                    type="button"
+                    onMouseDown={() => handleSelect('')}
+                    className={`w-full text-left px-3 py-1.5 text-sm transition-colors hover:bg-red-50 hover:text-databricks-red ${
+                      !value
+                        ? 'text-databricks-red font-medium bg-red-50'
+                        : 'text-gray-400'
+                    }`}
+                  >
+                    {placeholder}
+                  </button>
+                )}
+                {renderItems()}
+              </>
             )}
-            {renderItems()}
           </div>
         </div>
       )}

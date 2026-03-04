@@ -1,4 +1,4 @@
-import { PenLine } from 'lucide-react';
+import { PenLine, Settings } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 
 interface Props {
@@ -6,6 +6,7 @@ interface Props {
   experiments: { name: string }[];
   experimentsLoading: boolean;
   onExperimentChange: (name: string) => void;
+  onOpenSettings: () => void;
 }
 
 export default function Header({
@@ -13,6 +14,7 @@ export default function Header({
   experiments,
   experimentsLoading,
   onExperimentChange,
+  onOpenSettings,
 }: Props) {
   return (
     <header className="bg-white border-b border-gray-200">
@@ -23,14 +25,9 @@ export default function Header({
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-databricks-red">
               <PenLine className="w-4 h-4 text-white" />
             </div>
-            <div>
-              <h1 className="text-base font-bold text-gray-900 leading-tight">
-                Prompt Playground
-              </h1>
-              <p className="text-[11px] text-gray-500 leading-tight">
-                MLflow Prompt Registry
-              </p>
-            </div>
+            <h1 className="text-base font-bold text-gray-900 leading-tight">
+              Prompt Playground
+            </h1>
           </div>
 
           {/* Right — experiment context + status */}
@@ -44,7 +41,8 @@ export default function Header({
                   value={experimentName}
                   onChange={onExperimentChange}
                   disabled={experimentsLoading}
-                  placeholder={experimentsLoading ? 'Loading...' : 'All experiments'}
+                  placeholder={experimentsLoading ? 'Loading...' : 'Select an experiment...'}
+                  allowClear={false}
                   options={experiments.map((e) => ({ value: e.name, label: e.name }))}
                 />
               </div>
@@ -53,6 +51,14 @@ export default function Header({
             <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
               Connected
             </span>
+
+            <button
+              onClick={onOpenSettings}
+              title="App settings"
+              className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>

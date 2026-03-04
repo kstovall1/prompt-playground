@@ -17,6 +17,7 @@ import {
   Star,
   ArrowLeftRight,
   FileText,
+  Settings,
 } from 'lucide-react';
 
 function Section({ icon: Icon, title, color, children }: {
@@ -121,6 +122,32 @@ export default function HowToTab() {
           </div>
         </div>
 
+        {/* Settings */}
+        <Section icon={Settings} title="First-Time Setup — App Settings" color="bg-amber-50 text-amber-700">
+          <p className="text-xs text-gray-500 mb-4">
+            Before using the app, open <strong>Settings</strong> (gear icon in the header) to tell it where your data lives.
+            Settings are saved on the server and apply to all users of this app — you only need to do this once.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mb-4">
+            <div className="bg-white rounded-lg border border-amber-100 p-3 space-y-1">
+              <p className="font-semibold text-gray-700">SQL Warehouse</p>
+              <p className="text-gray-500 leading-relaxed">Required for reading evaluation datasets. Pick any READY warehouse — it will auto-resume if suspended.</p>
+            </div>
+            <div className="bg-white rounded-lg border border-amber-100 p-3 space-y-1">
+              <p className="font-semibold text-gray-700">Prompt Registry</p>
+              <p className="text-gray-500 leading-relaxed">The Unity Catalog and schema where your prompts are registered (e.g. <code className="bg-gray-100 px-1 rounded">my_catalog.prompts</code>).</p>
+            </div>
+            <div className="bg-white rounded-lg border border-amber-100 p-3 space-y-1">
+              <p className="font-semibold text-gray-700">Evaluation Data</p>
+              <p className="text-gray-500 leading-relaxed">The catalog and schema where your eval datasets (Delta tables) live. Can be the same catalog as prompts or a different one.</p>
+            </div>
+          </div>
+          <Tip>
+            The app opens Settings automatically on first load if it hasn't been configured yet.
+            After saving, the prompt list reloads immediately from the new location.
+          </Tip>
+        </Section>
+
         {/* Tab overview */}
         <Section icon={ArrowLeftRight} title="How the Three Tabs Work Together" color="bg-indigo-50 text-indigo-700">
           <p className="text-xs text-gray-500 mb-4">
@@ -173,7 +200,7 @@ export default function HowToTab() {
                 Source of truth for prompts. Engineers register versions with{' '}
                 <code className="bg-white border border-gray-200 px-1 rounded">{'{{variable}}'}</code>{' '}
                 placeholders and aliases like <code className="bg-white border border-gray-200 px-1 rounded">production</code>.
-                Stored in Unity Catalog — set the catalog and schema fields in the Prompts tab to point to yours.
+                Stored in Unity Catalog — configure which catalog and schema to use in <strong>Settings</strong> (gear icon).
               </p>
             </div>
             <div className="bg-gray-50 rounded-lg p-3 space-y-1.5">
@@ -210,10 +237,10 @@ export default function HowToTab() {
         {/* Prompts tab */}
         <Section icon={FileText} title="Prompts Tab — Browse, Manage, Edit" color="bg-gray-50 text-gray-700">
           <div className="space-y-4">
-            <Step num={1} icon={GitBranch} title="Set the Prompt Registry Location">
-              Enter the <strong>catalog</strong> and <strong>schema</strong> where your MLflow Prompt Registry
-              prompts live. The app loads all prompts from that location. Use the{' '}
-              <strong>Experiment</strong> selector in the header to scope the prompt list to only prompts
+            <Step num={1} icon={GitBranch} title="Browse Your Prompt Registry">
+              Your prompt registry location is configured in <strong>Settings</strong> (gear icon in the header).
+              The app loads all prompts from that catalog and schema automatically. Use the{' '}
+              <strong>Experiment</strong> selector in the header to filter the prompt list to only prompts
               that have been run in a specific MLflow experiment — a count badge shows how many match.
             </Step>
             <Step num={2} icon={Tag} title="Browse Prompts and Versions">
@@ -279,7 +306,7 @@ export default function HowToTab() {
             </Step>
             <Step num={4} icon={Star} title="Configure the Judge">
               <ul className="mt-1 space-y-1 list-none">
-                <li><strong>Default quality scorer</strong> — built-in 1–5 LLM-as-judge (helpfulness, accuracy, completeness). Set judge model and temperature.</li>
+                <li><strong>Default quality scorer</strong> — built-in 1–5 LLM-as-judge (helpfulness, accuracy, completeness). Uses your selected model by default; check <em>Use a different model for judging</em> to override. Adjust temperature if needed.</li>
                 <li className="mt-1"><strong>Built-in presets</strong> — Safety, Relevance, Fluency, Completeness, Summarization, Correctness. No config needed.</li>
                 <li className="mt-1"><strong>Registered judges</strong> — reusable, saved per-experiment. Click <strong>+ New</strong> to create a <em>Custom</em> (free-form instructions) or <em>Guidelines</em> (rule checklist with per-rule pass/fail) judge.</li>
               </ul>

@@ -58,16 +58,32 @@ export function useConfig() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    apiFetch<AppConfig>('/config')
-      .then((data) => setConfig(data))
-      .catch(() =>
-        setConfig({ prompt_catalog: 'main', prompt_schema: 'prompts', eval_catalog: 'main', eval_schema: 'eval_data', mlflow_experiment_name: '/Shared/prompt-playground-evaluation' })
-      )
-      .finally(() => setLoading(false));
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await apiFetch<AppConfig>('/config');
+      setConfig(data);
+    } catch {
+      setConfig({ prompt_catalog: '', prompt_schema: 'prompts', eval_catalog: '', eval_schema: 'eval_data', mlflow_experiment_name: '/Shared/prompt-playground-evaluation', sql_warehouse_id: '', sql_warehouse_name: '' });
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  return { config, loading };
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const saveSettings = useCallback(async (updates: Partial<AppConfig>) => {
+    const saved = await apiFetch<AppConfig>('/config', {
+      method: 'POST',
+      body: JSON.stringify(updates),
+    });
+    setConfig(saved);
+    return saved;
+  }, []);
+
+  const isConfigured = !loading && !!config?.prompt_catalog;
+
+  return { config, loading, refresh, saveSettings, isConfigured };
 }
 
 // --- Re-exports for backward compatibility ---

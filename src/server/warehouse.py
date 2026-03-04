@@ -1,23 +1,20 @@
 """SQL Warehouse client for reading Unity Catalog eval datasets."""
 
-import os
 import time
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.sql import StatementState
 from server.config import get_workspace_client
-
-WAREHOUSE_ID = os.environ.get("SQL_WAREHOUSE_ID", "")
 
 
 def _get_client() -> WorkspaceClient:
     return get_workspace_client()
 
 
-def list_eval_tables(catalog: str, schema: str) -> list[dict]:
+def list_eval_tables(catalog: str, schema: str, warehouse_id: str) -> list[dict]:
     """List tables in a given catalog.schema."""
     w = _get_client()
     resp = w.statement_execution.execute_statement(
-        warehouse_id=WAREHOUSE_ID,
+        warehouse_id=warehouse_id,
         statement=f"SHOW TABLES IN `{catalog}`.`{schema}`",
         wait_timeout="30s",
     )
@@ -31,11 +28,11 @@ def list_eval_tables(catalog: str, schema: str) -> list[dict]:
     return tables
 
 
-def get_table_columns(catalog: str, schema: str, table: str) -> list[str]:
+def get_table_columns(catalog: str, schema: str, table: str, warehouse_id: str) -> list[str]:
     """Return column names for a UC table."""
     w = _get_client()
     resp = w.statement_execution.execute_statement(
-        warehouse_id=WAREHOUSE_ID,
+        warehouse_id=warehouse_id,
         statement=f"DESCRIBE TABLE `{catalog}`.`{schema}`.`{table}`",
         wait_timeout="30s",
     )
@@ -51,11 +48,11 @@ def get_table_columns(catalog: str, schema: str, table: str) -> list[str]:
     return cols
 
 
-def count_table_rows(catalog: str, schema: str, table: str) -> int:
+def count_table_rows(catalog: str, schema: str, table: str, warehouse_id: str) -> int:
     """Return the total row count for a UC table."""
     w = _get_client()
     resp = w.statement_execution.execute_statement(
-        warehouse_id=WAREHOUSE_ID,
+        warehouse_id=warehouse_id,
         statement=f"SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`{table}`",
         wait_timeout="30s",
     )
@@ -66,11 +63,11 @@ def count_table_rows(catalog: str, schema: str, table: str) -> int:
     return 0
 
 
-def read_table_rows(catalog: str, schema: str, table: str, limit: int = 50) -> list[dict]:
+def read_table_rows(catalog: str, schema: str, table: str, warehouse_id: str, limit: int = 50) -> list[dict]:
     """Read rows from a UC table as list of dicts."""
     w = _get_client()
     resp = w.statement_execution.execute_statement(
-        warehouse_id=WAREHOUSE_ID,
+        warehouse_id=warehouse_id,
         statement=f"SELECT * FROM `{catalog}`.`{schema}`.`{table}` LIMIT {limit}",
         wait_timeout="50s",
     )

@@ -132,7 +132,6 @@ export default function PromptSelector({
                   <button
                     key={v.version}
                     onClick={() => onSelectVersion(v.version)}
-                    title={v.description || undefined}
                     className={`w-full text-left rounded-lg px-3 py-2 text-sm transition-colors border ${
                       isSelected
                         ? 'border-databricks-red bg-red-50 text-gray-900'
@@ -146,7 +145,7 @@ export default function PromptSelector({
                       </div>
                     </div>
                     {v.description && (
-                      <div className="mt-0.5 ml-5 text-[11px] text-gray-500 italic truncate">
+                      <div className="mt-0.5 ml-5 text-[11px] text-gray-500 truncate">
                         {v.description}
                       </div>
                     )}

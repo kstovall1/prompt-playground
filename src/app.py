@@ -20,6 +20,7 @@ from server.routes.models import router as models_router
 from server.routes.run import router as run_router
 from server.routes.evaluate import router as evaluate_router
 from server.routes.config import router as config_router
+from server.routes.setup import router as setup_router
 
 
 @asynccontextmanager
@@ -41,6 +42,7 @@ app.include_router(models_router)
 app.include_router(run_router)
 app.include_router(evaluate_router)
 app.include_router(config_router)
+app.include_router(setup_router)
 
 
 # Health check

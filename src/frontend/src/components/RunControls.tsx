@@ -48,7 +48,7 @@ export default function RunControls({ canRun, loading, onRun, onReset, unfilledV
         <button
           onClick={onReset}
           className="btn-secondary"
-          title="Reset response"
+          title="Clear results"
         >
           <RotateCcw className="w-4 h-4" />
         </button>

@@ -5,6 +5,7 @@ so we use query parameters instead of path parameters to avoid conflicts
 with dots in names.
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from server.mlflow_client import (
@@ -49,7 +50,7 @@ async def api_list_prompts(
 ):
     """List all registered prompts in the given catalog.schema."""
     try:
-        prompts = list_prompts(catalog=catalog, schema=schema)
+        prompts = await asyncio.to_thread(list_prompts, catalog=catalog, schema=schema)
         return {"prompts": prompts, "catalog": catalog, "schema": schema}
     except Exception as e:
         detail = str(e)
@@ -67,7 +68,7 @@ async def api_get_prompt_versions(
 ):
     """Get all versions and aliases for a specific prompt."""
     try:
-        versions = get_prompt_versions(name)
+        versions = await asyncio.to_thread(get_prompt_versions, name)
         return {"name": name, "versions": versions}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -80,7 +81,7 @@ async def api_get_prompt_template(
 ):
     """Load a prompt template by name and version or alias."""
     try:
-        template = get_prompt_template(name, version)
+        template = await asyncio.to_thread(get_prompt_template, name, version)
         return template
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

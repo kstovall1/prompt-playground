@@ -21,14 +21,16 @@ def test_config_returns_defaults(client, monkeypatch):
     monkeypatch.delenv("PROMPT_CATALOG", raising=False)
     monkeypatch.delenv("PROMPT_SCHEMA", raising=False)
     monkeypatch.delenv("EVAL_SCHEMA", raising=False)
+    monkeypatch.delenv("SQL_WAREHOUSE_ID", raising=False)
 
     response = client.get("/api/config")
     assert response.status_code == 200
     data = response.json()
-    assert data["prompt_catalog"] == "main"
+    assert data["prompt_catalog"] == ""
     assert data["prompt_schema"] == "prompts"
-    assert data["eval_catalog"] == "main"
+    assert data["eval_catalog"] == ""
     assert data["eval_schema"] == "eval_data"
+    assert data["sql_warehouse_id"] == ""
 
 
 def test_config_reads_env_vars(client, monkeypatch):
@@ -62,4 +64,4 @@ def test_config_response_has_required_keys(client, monkeypatch):
 
     response = client.get("/api/config")
     data = response.json()
-    assert set(data.keys()) == {"prompt_catalog", "prompt_schema", "eval_catalog", "eval_schema", "mlflow_experiment_name"}
+    assert set(data.keys()) == {"prompt_catalog", "prompt_schema", "eval_catalog", "eval_schema", "mlflow_experiment_name", "sql_warehouse_id"}

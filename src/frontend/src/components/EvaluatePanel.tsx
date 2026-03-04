@@ -10,6 +10,7 @@ import DatasetTable from './eval/DatasetTable';
 import ConfirmDialog from './ConfirmDialog';
 
 const BUILTIN_JUDGES = [
+  { value: 'quality', label: 'Quality scorer', description: 'Scores overall response quality using an LLM judge on a 1–5 scale, evaluating helpfulness, accuracy, and completeness.' },
   { value: 'safety', label: 'Safety', description: 'Detects harmful, offensive, or toxic content in responses' },
   { value: 'relevance_to_query', label: 'Relevance to Query', description: 'Checks if the response addresses the input question' },
   { value: 'fluency', label: 'Fluency', description: 'Evaluates clarity and readability of the response' },
@@ -29,11 +30,13 @@ interface Props {
   onSelectVersion: (version: string | null) => void;
   models: { name: string; state: string }[];
   selectedModel: string | null;
-  onSelectModel: (name: string) => void;
+  onSelectModel: (name: string | null) => void;
   template: PromptTemplate | null;
   experimentName: string;
   onNewVersion?: () => void;
   onExperimentUrl?: (url: string) => void;
+  onOpenSettings?: () => void;
+  hasWarehouse?: boolean;
 }
 
 
@@ -58,7 +61,7 @@ function JudgePreview({ name }: { name: string }) {
       {expanded && (
         <div className="px-3 py-2.5 bg-white">
           {loading ? (
-            <p className="text-xs text-gray-400">Loading...</p>
+            <p className="text-xs text-gray-400">Loading judge details...</p>
           ) : !detail ? (
             <p className="text-xs text-gray-400 italic">Could not load judge details.</p>
           ) : detail.type === 'guidelines' && detail.guidelines ? (
@@ -85,26 +88,31 @@ export default function EvaluatePanel({
   evalCatalog, evalSchema,
   prompts, versions, selectedPrompt, selectedVersion,
   onSelectPrompt, onSelectVersion, models, selectedModel, onSelectModel,
-  template, experimentName, onNewVersion, onExperimentUrl,
+  template, experimentName, onNewVersion, onExperimentUrl, onOpenSettings, hasWarehouse,
 }: Props) {
-  const [localEvalCatalog, setLocalEvalCatalog] = useState(evalCatalog);
-  const [localEvalSchema, setLocalEvalSchema] = useState(evalSchema);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
   const [maxRows, setMaxRows] = useState(5);
-  const [scorerName, setScorerName] = useState<string | null>(null);
+  const [scorerName, setScorerName] = useState<string | null>('quality');
   const [expectationsColumn, setExpectationsColumn] = useState<string | null>(null);
   const [judgeModel, setJudgeModel] = useState<string>('');
   const [judgeTemperature, setJudgeTemperature] = useState(0);
+  const [useCustomJudgeModel, setUseCustomJudgeModel] = useState(false);
   const [showCreateJudge, setShowCreateJudge] = useState(false);
   const [editingJudge, setEditingJudge] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { deleteJudge, loading: deleteLoading } = useDeleteJudge();
 
+  // Reset table selection when eval catalog/schema changes
+  useEffect(() => {
+    setSelectedTable(null);
+    setColumnMapping({});
+  }, [evalCatalog, evalSchema]);
+
   const { judges, loading: judgesLoading, refresh: refreshJudges } = useJudges(experimentName);
-  const { tables, loading: tablesLoading, error: tablesError } = useEvalTables(localEvalCatalog, localEvalSchema);
-  const { columns } = useEvalColumns(localEvalCatalog, localEvalSchema, selectedTable);
-  const { columns: previewCols, rows: previewRows, totalRows, loading: previewLoading } = useTablePreview(localEvalCatalog, localEvalSchema, selectedTable);
+  const { tables, loading: tablesLoading, error: tablesError } = useEvalTables(evalCatalog, evalSchema);
+  const { columns } = useEvalColumns(evalCatalog, evalSchema, selectedTable);
+  const { columns: previewCols, rows: previewRows, totalRows, loading: previewLoading } = useTablePreview(evalCatalog, evalSchema, selectedTable);
   const { result, loading, error, runEval, reset } = useRunEval();
 
   // Bubble experiment URL up to App when eval completes
@@ -112,12 +120,14 @@ export default function EvaluatePanel({
     if (result?.experiment_url) onExperimentUrl?.(result.experiment_url);
   }, [result?.experiment_url]);
 
-  // Auto-select latest version when versions load and none is selected
+  // Auto-select the latest version when versions load and none is selected.
+  // Versions are cleared synchronously on prompt change (via resetVersions in App.tsx),
+  // so this only fires once the fresh versions for the current prompt have loaded.
   useEffect(() => {
-    if (versions.length > 0 && !selectedVersion) {
+    if (selectedPrompt && versions.length > 0 && !selectedVersion) {
       onSelectVersion(versions[0].version);
     }
-  }, [versions, selectedVersion, onSelectVersion]);
+  }, [selectedPrompt, versions, selectedVersion, onSelectVersion]);
 
   // Use variables from the full template (reliable) or fall back to version preview parsing
   const variables: string[] = template?.variables ?? (() => {
@@ -147,6 +157,19 @@ export default function EvaluatePanel({
     });
   }, [columns, variables]);
 
+  const handleReset = () => {
+    reset();
+    setSelectedTable(null);
+    setColumnMapping({});
+    setMaxRows(5);
+    onSelectModel(null);
+    setScorerName('quality');
+    setExpectationsColumn(null);
+    setJudgeModel('');
+    setJudgeTemperature(0);
+    setUseCustomJudgeModel(false);
+  };
+
   const canRun = !!(selectedPrompt && selectedVersion && selectedModel && selectedTable &&
     variables.every((v) => columnMapping[v]) &&
     (scorerName !== 'correctness' || !!expectationsColumn));
@@ -158,13 +181,13 @@ export default function EvaluatePanel({
       prompt_name: selectedPrompt,
       prompt_version: selectedVersion,
       model_name: selectedModel,
-      dataset_catalog: localEvalCatalog,
-      dataset_schema: localEvalSchema,
+      dataset_catalog: evalCatalog,
+      dataset_schema: evalSchema,
       dataset_table: selectedTable,
       column_mapping: columnMapping,
       max_rows: maxRows,
       experiment_name: experimentName || undefined,
-      scorer_name: scorerName || undefined,
+      scorer_name: (!scorerName || scorerName === 'quality') ? undefined : scorerName,
       judge_model: judgeModel || undefined,
       judge_temperature: judgeTemperature,
       expectations_column: expectationsColumn || undefined,
@@ -175,6 +198,18 @@ export default function EvaluatePanel({
     <div className="h-full flex overflow-hidden">
       {/* Left config panel */}
       <div className="w-1/3 min-w-[272px] flex-shrink-0 border-r border-gray-200 bg-white flex flex-col overflow-hidden">
+      {!hasWarehouse && evalCatalog && (
+        <div className="flex-shrink-0 px-4 py-2.5 border-b border-amber-100 bg-amber-50">
+          <p className="text-xs text-amber-700">
+            SQL warehouse not configured.{' '}
+            {onOpenSettings && (
+              <button onClick={onOpenSettings} className="underline font-medium">
+                Open Settings →
+              </button>
+            )}
+          </p>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-4 space-y-5">
 
         {/* ── 1. Prompt ───────────────────────────────── */}
@@ -185,7 +220,7 @@ export default function EvaluatePanel({
           <SearchableSelect
             value={selectedPrompt || ''}
             onChange={(val) => { onSelectPrompt(val || null); onSelectVersion(null); setColumnMapping({}); }}
-            placeholder="Select prompt..."
+            placeholder="Select a prompt..."
             options={prompts.map((p) => ({ value: p.name, label: p.name.split('.').pop() ?? p.name }))}
           />
         </div>
@@ -209,10 +244,10 @@ export default function EvaluatePanel({
             <SearchableSelect
               value={selectedVersion || ''}
               onChange={(val) => { onSelectVersion(val || null); setColumnMapping({}); }}
-              placeholder="Select version..."
+              placeholder="Select a version..."
               options={versions.map((v) => ({
                 value: v.version,
-                label: `v${v.version}${v.aliases.length > 0 ? ` (${v.aliases.join(', ')})` : ''}`,
+                label: `v${v.version}${v.aliases.length > 0 ? ` · ${v.aliases.join(', ')}` : ''}${v.description ? ` — ${v.description}` : ''}`,
               }))}
             />
           </div>
@@ -228,23 +263,26 @@ export default function EvaluatePanel({
 
         {/* Eval dataset — catalog, schema, and table in one group */}
         <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Eval Dataset</label>
-          <div className="flex items-center gap-1 mb-2">
-            <input
-              type="text"
-              className="text-sm border border-gray-200 rounded-md px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-databricks-red focus:border-transparent"
-              placeholder="catalog"
-              value={localEvalCatalog}
-              onChange={(e) => { setLocalEvalCatalog(e.target.value); setSelectedTable(null); setColumnMapping({}); }}
-            />
-            <span className="text-gray-400 text-sm select-none">.</span>
-            <input
-              type="text"
-              className="text-sm border border-gray-200 rounded-md px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-databricks-red focus:border-transparent"
-              placeholder="schema"
-              value={localEvalSchema}
-              onChange={(e) => { setLocalEvalSchema(e.target.value); setSelectedTable(null); setColumnMapping({}); }}
-            />
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Evaluation Data</label>
+          <div className="mb-2">
+            {evalCatalog ? (
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono text-gray-500 truncate">
+                  {evalCatalog}<span className="text-gray-300">.</span>{evalSchema}
+                </span>
+                {onOpenSettings && (
+                  <button onClick={onOpenSettings} className="text-xs text-databricks-red hover:underline flex-shrink-0 ml-2">
+                    Edit →
+                  </button>
+                )}
+              </div>
+            ) : (
+              onOpenSettings && (
+                <button onClick={onOpenSettings} className="text-xs text-databricks-red hover:underline">
+                  Open Settings →
+                </button>
+              )
+            )}
           </div>
           {tablesLoading ? (
             <p className="text-xs text-gray-400">Loading tables...</p>
@@ -254,7 +292,7 @@ export default function EvaluatePanel({
             <SearchableSelect
               value={selectedTable || ''}
               onChange={(val) => { setSelectedTable(val || null); setColumnMapping({}); }}
-              placeholder="Select dataset table..."
+              placeholder="Select a table..."
               options={tables.map((t) => ({ value: t, label: t }))}
             />
           )}
@@ -313,7 +351,7 @@ export default function EvaluatePanel({
                   <SearchableSelect
                     value={columnMapping[v] || ''}
                     onChange={(val) => setColumnMapping((prev) => ({ ...prev, [v]: val }))}
-                    placeholder="column..."
+                    placeholder="Select a column..."
                     options={columns.map((c) => ({ value: c, label: c }))}
                   />
                 </div>
@@ -330,7 +368,7 @@ export default function EvaluatePanel({
           <SearchableSelect
             value={selectedModel || ''}
             onChange={(val) => onSelectModel(val)}
-            placeholder="Select model..."
+            placeholder="Select a model..."
             options={models.filter((m) => m.state === 'READY').map((m) => ({ value: m.name, label: m.name }))}
           />
         </div>
@@ -383,7 +421,7 @@ export default function EvaluatePanel({
               if (val !== 'correctness') setExpectationsColumn(null);
             }}
             disabled={judgesLoading}
-            placeholder="Default quality scorer"
+            placeholder="Select a judge..."
             groups={[
               { label: 'Built-in Presets', options: BUILTIN_JUDGES },
               ...(judges.length > 0
@@ -393,7 +431,7 @@ export default function EvaluatePanel({
           />
 
           {/* Description for selected built-in judge */}
-          {scorerName && BUILTIN_JUDGES.some((b) => b.value === scorerName) && (
+          {BUILTIN_JUDGES.some((b) => b.value === scorerName) && (
             <p className="mt-1.5 text-[11px] text-gray-400 leading-relaxed">
               {BUILTIN_JUDGES.find((b) => b.value === scorerName)?.description}
             </p>
@@ -413,7 +451,7 @@ export default function EvaluatePanel({
               <SearchableSelect
                 value={expectationsColumn || ''}
                 onChange={(val) => setExpectationsColumn(val || null)}
-                placeholder="Select column..."
+                placeholder="Select a column..."
                 options={columns.map((c) => ({ value: c, label: c }))}
               />
               <p className="mt-1 text-[11px] text-gray-400">
@@ -422,22 +460,32 @@ export default function EvaluatePanel({
             </div>
           )}
 
-          {/* Judge model + temperature — only relevant for the default quality scorer */}
-          {!scorerName && (
+          {/* Judge model + temperature — only relevant for the quality scorer */}
+          {scorerName === 'quality' && (
             <div className="mt-3 space-y-3 pl-3 border-l-2 border-gray-200">
-              <p className="text-[11px] text-gray-400 leading-relaxed">
-                Scores overall response quality using an LLM judge on a 1–5 scale, evaluating helpfulness, accuracy, and completeness.
-              </p>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  Judge model
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={useCustomJudgeModel}
+                    onChange={(e) => {
+                      setUseCustomJudgeModel(e.target.checked);
+                      if (!e.target.checked) setJudgeModel('');
+                    }}
+                    className="rounded border-gray-300 accent-databricks-red"
+                  />
+                  <span className="text-xs text-gray-500">Use a different model for judging</span>
                 </label>
-                <SearchableSelect
-                  value={judgeModel || selectedModel || ''}
-                  onChange={(val) => setJudgeModel(val === selectedModel ? '' : val)}
-                  placeholder="Select model..."
-                  options={models.filter((m) => m.state === 'READY').map((m) => ({ value: m.name, label: m.name }))}
-                />
+                {useCustomJudgeModel && (
+                  <div className="mt-2">
+                    <SearchableSelect
+                      value={judgeModel || ''}
+                      onChange={(val) => setJudgeModel(val)}
+                      placeholder="Select a model..."
+                      options={models.filter((m) => m.state === 'READY').map((m) => ({ value: m.name, label: m.name }))}
+                    />
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">
@@ -473,9 +521,9 @@ export default function EvaluatePanel({
             )}
           </button>
           <button
-            onClick={() => reset()}
+            onClick={handleReset}
             className="px-3 py-2.5 border border-gray-200 rounded-lg text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
-            title="Clear evaluation results"
+            title="Reset to defaults"
           >
             <RotateCcw className="w-4 h-4" />
           </button>

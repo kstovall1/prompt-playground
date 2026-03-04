@@ -103,4 +103,6 @@ export interface AppConfig {
   eval_catalog: string;
   eval_schema: string;
   mlflow_experiment_name: string;
+  sql_warehouse_id: string;
+  sql_warehouse_name: string;
 }

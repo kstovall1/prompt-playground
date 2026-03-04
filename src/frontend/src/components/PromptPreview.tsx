@@ -1,5 +1,6 @@
 import { Eye, Pencil, Save, Plus } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import ConfirmDialog from './ConfirmDialog';
 import { parseTemplateVariables, parseSystemUser, buildXmlTemplate } from '../utils/templateUtils';
 
 type InputMode = 'chat' | 'raw';
@@ -45,12 +46,17 @@ export default function PromptPreview({
   isDirty,
 }: Props) {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [saveDescription, setSaveDescription] = useState('');
   const [inputMode, setInputMode] = useState<InputMode>('chat');
   const [previewMode, setPreviewMode] = useState<InputMode>('raw');
   const [localSystem, setLocalSystem] = useState('');
   const [localUser, setLocalUser] = useState('');
+  const [registerError, setRegisterError] = useState<string | null>(null);
   const debounceRef = useRef<number>();
+
+  const { system: draftSystem, user: draftUser } = parseSystemUser(draftTemplate);
+  const hasEmptyUser = draftSystem !== null && !draftUser.trim();
 
   // Determine if the preview source has a system prompt (for the Chat/Raw toggle)
   const previewSrc = !isEditing ? (isDirty ? draftTemplate : (template || '')) : '';
@@ -85,6 +91,9 @@ export default function PromptPreview({
     }, 300);
     return () => clearTimeout(debounceRef.current);
   }, [draftTemplate, isEditing, onDraftVariablesChange]);
+
+  // Clear inline register error when the template changes
+  useEffect(() => { setRegisterError(null); }, [draftTemplate]);
 
   const switchMode = (next: InputMode) => {
     if (next === inputMode) return;
@@ -184,34 +193,37 @@ export default function PromptPreview({
               </button>
             </div>
           )}
-          {(isEditing || isLatestVersion) && (
+          {!isEditing && isLatestVersion && (
             <button
               onClick={onToggleEdit}
-              className={`text-xs flex items-center gap-1 transition-colors ${
-              isEditing
-                ? 'text-gray-500 hover:text-gray-700'
-                : 'font-medium text-databricks-red hover:text-red-700'
-            }`}
+              className="text-xs flex items-center gap-1 transition-colors font-medium text-databricks-red hover:text-red-700"
             >
-              {isEditing ? (
-                <>
-                  <Eye className="w-3 h-3" /> Preview
-                </>
-              ) : (
-                <>
-                  <Plus className="w-3 h-3" /> New version
-                </>
-              )}
+              <Plus className="w-3 h-3" /> New version
             </button>
           )}
           {isEditing && template !== null && (
-            <button
-              onClick={() => setShowSaveDialog(true)}
-              disabled={!isDirty}
-              className="text-xs text-white bg-databricks-red hover:bg-red-700 px-2.5 py-1 rounded-md flex items-center gap-1 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Save className="w-3 h-3" /> Register Version
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => {
+                  if (isDirty) { setShowDiscardConfirm(true); return; }
+                  onToggleEdit();
+                }}
+                className="text-xs text-gray-600 hover:text-gray-800 px-2.5 py-1 rounded-md font-medium transition-colors border border-gray-300 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (hasEmptyUser) { setRegisterError('A prompt requires a non-empty user input.'); return; }
+                  setRegisterError(null);
+                  setShowSaveDialog(true);
+                }}
+                disabled={!isDirty}
+                className="text-xs text-white bg-databricks-red hover:bg-red-700 px-2.5 py-1 rounded-md flex items-center gap-1 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Save className="w-3 h-3" /> Register Version
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -219,6 +231,9 @@ export default function PromptPreview({
       {/* Edit mode */}
       {isEditing ? (
         <div className="flex-1 p-4 overflow-hidden flex flex-col gap-3">
+          {registerError && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">{registerError}</p>
+          )}
           {/* Mode toggle */}
           <div className="flex items-center justify-between">
             <span className="text-xs text-gray-400">Input format</span>
@@ -328,6 +343,17 @@ export default function PromptPreview({
         </div>
       )}
 
+      {showDiscardConfirm && (
+        <ConfirmDialog
+          title="Discard unsaved changes?"
+          message="Your edits to this version will be lost."
+          confirmLabel="Discard"
+          variant="warning"
+          onConfirm={() => { setShowDiscardConfirm(false); onToggleEdit(); }}
+          onCancel={() => setShowDiscardConfirm(false)}
+        />
+      )}
+
       {/* Save dialog */}
       {showSaveDialog && (
         <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 space-y-2">
@@ -354,10 +380,10 @@ export default function PromptPreview({
               disabled={saveLoading}
               className="btn-primary text-xs py-1.5"
             >
-              {saveLoading ? 'Saving...' : 'Register'}
+              {saveLoading ? 'Registering...' : 'Register'}
             </button>
             <button
-              onClick={() => setShowSaveDialog(false)}
+              onClick={() => { setShowSaveDialog(false); onToggleEdit(); }}
               className="btn-secondary text-xs py-1.5"
             >
               Cancel

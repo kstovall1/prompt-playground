@@ -24,8 +24,13 @@ export default function PromptForm({ catalog, schema, onSaved, onCancel }: Props
   const { create, loading, error } = useCreatePrompt();
 
   const fullName = `${catalog}.${schema}.${name.trim() || '<name>'}`;
+  const rawHasEmptyUser = inputMode === 'raw' && (() => {
+    const { system, user } = parseSystemUser(rawTemplate);
+    return system !== null && !user.trim();
+  })();
   const isValid =
     name.trim().length > 0 &&
+    !rawHasEmptyUser &&
     (inputMode === 'chat' ? userTemplate.trim().length > 0 : rawTemplate.trim().length > 0);
 
   const switchMode = (next: InputMode) => {
@@ -125,27 +130,30 @@ export default function PromptForm({ catalog, schema, onSaved, onCancel }: Props
               <label className="text-sm font-medium text-gray-700">
                 Template <span className="text-databricks-red">*</span>
               </label>
-              <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
-                <button
-                  onClick={() => switchMode('chat')}
-                  className={`px-3 py-1.5 font-medium transition-colors ${
-                    inputMode === 'chat'
-                      ? 'bg-gray-100 text-gray-800'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  Chat
-                </button>
-                <button
-                  onClick={() => switchMode('raw')}
-                  className={`px-3 py-1.5 font-medium transition-colors border-l border-gray-200 ${
-                    inputMode === 'raw'
-                      ? 'bg-gray-100 text-gray-800'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  Raw
-                </button>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">Input format</span>
+                <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
+                  <button
+                    onClick={() => switchMode('chat')}
+                    className={`px-3 py-1.5 font-medium transition-colors ${
+                      inputMode === 'chat'
+                        ? 'bg-gray-100 text-gray-800'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Chat
+                  </button>
+                  <button
+                    onClick={() => switchMode('raw')}
+                    className={`px-3 py-1.5 font-medium transition-colors border-l border-gray-200 ${
+                      inputMode === 'raw'
+                        ? 'bg-gray-100 text-gray-800'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Raw
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -203,6 +211,9 @@ export default function PromptForm({ catalog, schema, onSaved, onCancel }: Props
             </p>
           </div>
 
+          {rawHasEmptyUser && (
+            <p className="text-xs text-amber-600">A system prompt requires a non-empty user message.</p>
+          )}
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
               {error}
